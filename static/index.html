@@ -1097,6 +1097,11 @@ async function renderSettings(){
         <label class="f"><span>קוד אישי (4 ספרות לפחות)</span><input type="password" name="pin" inputmode="numeric" minlength="4" required autocomplete="new-password"></label>
         <div class="actions" style="grid-column:1/-1"><button class="btn" type="submit">שמור מנהל</button></div></form>
       <div class="actions"><button class="btn ghost" type="button" id="admOut">יציאה ממצב מנהל</button></div></div>
+    <div class="card" id="cldC"><h3>שיחה עם Claude</h3>
+      <p>מחברים את <b>אפליקציית Claude</b> במחשב הזה למערכת. אחר כך אפשר לכתוב לו בשפה רגילה, והוא קורא ומעדכן את המערכת ישירות. למשל:</p>
+      <ul style="margin:0;padding-inline-start:20px;display:flex;flex-direction:column;gap:4px"><li>"מה דחוף היום?"</li><li>"בתיק של בן ציון לוי הוגש כתב הגנה היום. תעדכן."</li><li>"תפתח לסיוון משימה להגיש תגובה בתיק נובה עד 5.11."</li><li>"בעסקה של סעידה ולטיפה נרשמה הערת אזהרה."</li><li>"תנסח טיוטת הודעת עדכון בתיק אלפרד כהן לפי המסמכים בתיק."</li></ul>
+      <p class="note">החיבור עובד רק באפליקציית Claude שמותקנת <b>במחשב הראשי</b> (המחשב שבו פועלת המערכת). <a href="https://claude.ai/download" target="_blank" rel="noopener">להורדת אפליקציית Claude</a></p>
+      <div id="cldBox" class="row"><span class="muted">בודק…</span></div></div>
     <div class="card" id="updC"><h3>עדכוני תוכנה</h3><p class="muted">גרסה מותקנת: <b id="updCur">…</b></p>
       <form id="srcF" class="row"><input type="text" name="repo" id="updRepo" placeholder="שם המאגר ב-GitHub, למשל yossi/lawboard" style="flex:1 1 220px;width:auto"><button class="btn ghost" type="submit">שמור מקור</button></form>
       <div id="updBox" class="muted">בודק…</div></div>
@@ -1122,7 +1127,7 @@ async function renderSettings(){
   $('#admF').addEventListener('submit',async e=>{e.preventDefault();const d=Object.fromEntries(new FormData(e.target));try{await api('POST','/api/admin/set',d);e.target.reset();await loadAdmin();toast(`${d.name} מוגדר כמנהל`);render()}catch(x){toast(x.message||'השמירה נכשלה')}});
   document.querySelectorAll('[data-admrm]').forEach(b=>b.addEventListener('click',async()=>{if(!b.dataset.sure){b.dataset.sure=1;b.textContent='לחצו שוב לאישור';return}
     try{await api('POST','/api/admin/remove',{name:b.dataset.admrm});if(b.dataset.admrm===S.admin)S.admin=null;await loadAdmin();render()}catch(x){toast(x.message||'הפעולה נכשלה')}}));
-  updCard();
+  updCard();cldCard();
   $('#srcF').addEventListener('submit',async e=>{e.preventDefault();await api('POST','/api/update/source',{repo:$('#updRepo').value});toast('נשמר');updCard()});
   $('#admOut').addEventListener('click',async()=>{await fetch('/api/admin/logout',{method:'POST',credentials:'same-origin'});S.admin=null;markAdmin();render()});
 }
@@ -1440,6 +1445,16 @@ function showWho(canCancel){
 }
 async function savePeople(list){S.people=list;await S.db.doc('settings/people').set({list})}
 async function saveSettings(patch){S.settings={...S.settings,...patch};await S.db.doc('settings/main').set(S.settings);applyTheme()}
+
+/* ---------- connect the Claude desktop app ---------- */
+async function cldCard(){
+  const box=$('#cldBox');if(!box)return;let st={connected:false};try{st=await api('GET','/api/claude')}catch(e){}
+  box.innerHTML=st.connected?`<span class="chip ok">מחובר</span><span class="muted">אם עדיין לא עשיתם זאת: סגרו את אפליקציית Claude לגמרי (גם מהסמל ליד השעון) ופתחו מחדש.</span><button class="btn ghost sm" type="button" id="cldGo">חבר שוב</button>`
+    :`<button class="btn" type="button" id="cldGo">חבר את אפליקציית Claude</button>`;
+  $('#cldGo').addEventListener('click',async()=>{try{await api('POST','/api/claude/connect',{});
+    sheet(`<h2>החיבור הוגדר</h2><ol style="margin:0;padding-inline-start:20px;display:flex;flex-direction:column;gap:6px"><li><b>סגרו את אפליקציית Claude לגמרי</b>: גם מהסמל שליד השעון בתחתית המסך (לחצן ימני ← Quit).</li><li>פתחו את אפליקציית Claude מחדש.</li><li>פתחו שיחה חדשה וכתבו: <b>"מה דחוף היום בלוח התיקים?"</b></li><li>בפעם הראשונה Claude יבקש אישור להשתמש בכלים של "lawboard". אשרו (אפשר לבחור "אשר תמיד").</li></ol><div class="actions"><button class="btn" type="button" data-close>הבנתי</button></div>`);cldCard()}
+    catch(e){toast(e.message||'החיבור נכשל')}});
+}
 
 /* ---------- software updates ---------- */
 async function updCard(){

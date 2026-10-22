@@ -165,6 +165,46 @@ def apply_update():
     return local_version()
 
 
+def claude_config_paths():
+    """Where the Claude desktop app keeps its settings on this computer."""
+    if os.name == "nt":
+        found = []
+        local = os.environ.get("LOCALAPPDATA")
+        if local:  # the Microsoft Store edition keeps them inside its package folder
+            found += [p / "LocalCache" / "Roaming" / "Claude" / "claude_desktop_config.json" for p in Path(local, "Packages").glob("Claude_*")]
+        return found + [Path(os.environ.get("APPDATA", "")) / "Claude" / "claude_desktop_config.json"]
+    if sys.platform == "darwin":
+        return [Path.home() / "Library" / "Application Support" / "Claude" / "claude_desktop_config.json"]
+    return [Path.home() / ".config" / "Claude" / "claude_desktop_config.json"]
+
+
+def claude_status():
+    for p in claude_config_paths():
+        try:
+            if "lawboard" in json.loads(p.read_text(encoding="utf-8")).get("mcpServers", {}):
+                return True
+        except (OSError, ValueError):
+            pass
+    return False
+
+
+def claude_connect():
+    """Adds this system to the Claude app's connectors, keeping everything else in the file."""
+    entry = {"command": sys.executable, "args": [str(ROOT / "mcp_server.py")]}
+    paths = claude_config_paths()
+    targets = [p for p in paths if p.parent.exists()] or [paths[-1]]
+    for p in targets:
+        p.parent.mkdir(parents=True, exist_ok=True)
+        cfg = {}
+        if p.exists():
+            raw = p.read_text(encoding="utf-8")
+            cfg = json.loads(raw) if raw.strip() else {}
+            shutil.copy2(p, p.with_suffix(".json.bak"))
+        cfg.setdefault("mcpServers", {})["lawboard"] = entry
+        p.write_text(json.dumps(cfg, ensure_ascii=False, indent=2), encoding="utf-8")
+    return [str(p) for p in targets]
+
+
 def get_admins():
     try:
         return json.loads(get_conf("admins") or "{}")
@@ -357,6 +397,17 @@ class Handler(BaseHTTPRequestHandler):
                 self.send_json({"ok": True, "version": v})
                 threading.Timer(1.0, lambda: os._exit(RESTART_CODE)).start()
                 return
+            if p == "/api/claude" and method == "GET":
+                return self.send_json({"connected": claude_status()})
+            if p == "/api/claude/connect" and method == "POST":
+                if not self.admin():
+                    return self.fail(403, "רק מנהל")
+                try:
+                    return self.send_json({"ok": True, "files": claude_connect()})
+                except ValueError:
+                    return self.fail(500, "קובץ ההגדרות של אפליקציית Claude פגום. פתחו אותו ותקנו, או מחקו אותו ונסו שוב.")
+                except OSError:
+                    return self.fail(500, "לא הצלחתי לכתוב את הגדרות אפליקציית Claude במחשב הזה.")
             if p == "/api/version" and method == "GET":
                 return self.send_json({"version": local_version()})
             if p == "/api/admin" and method == "GET":
