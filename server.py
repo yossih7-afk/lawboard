@@ -358,7 +358,7 @@ class Handler(BaseHTTPRequestHandler):
         try:
             if method == "GET" and p in ("/", "/index.html"):
                 return self.serve_file(STATIC / "index.html", "text/html; charset=utf-8")
-            if method == "GET" and p == "/capture-receive":
+            if method == "GET" and p in ("/capture-receive", "/claude-import"):
                 return self.serve_file(STATIC / "receive.html", "text/html; charset=utf-8")
             if method == "GET" and p.startswith("/static/"):
                 f = (STATIC / p[len("/static/"):]).resolve()

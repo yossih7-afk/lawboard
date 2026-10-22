@@ -1098,15 +1098,33 @@ function downloadText(text,name){const a=document.createElement('a');a.href=URL.
 /* ---------- Net HaMishpat inbox (pages saved with the bookmark button) ---------- */
 function bookmarkletCode(){
   const O=location.origin;
-  return `(async()=>{const O=${JSON.stringify(O)};const w=window.open(O+'/capture-receive','nh_capture','width=560,height=680');if(!w){alert('הדפדפן חסם את החלון. אפשרו חלונות קופצים לאתר נט המשפט ונסו שוב.');return}
+  /* runs inside the Net HaMishpat page: collects the page, finds every decision/document control,
+     and downloads it the way the site itself would (plain link, ASP.NET postback, or a viewer window) */
+  return `(async()=>{const O=${JSON.stringify(O)};const w=window.open(O+'/capture-receive','nh_capture','width=600,height=720');if(!w){alert('הדפדפן חסם את החלון. אפשרו חלונות קופצים לאתר נט המשפט ונסו שוב.');return}
 let ready=false,sent=false,payload=null;const trySend=()=>{if(ready&&payload&&!sent){sent=true;w.postMessage(payload,O)}};
 addEventListener('message',e=>{if(e.source===w&&e.data==='nh-ready'){ready=true;trySend()}});
-const docs=[document];document.querySelectorAll('iframe,frame').forEach(f=>{try{if(f.contentDocument)docs.push(f.contentDocument)}catch(e){}});
+const docs=[document];const walk=d=>d.querySelectorAll('iframe,frame').forEach(f=>{try{if(f.contentDocument){docs.push(f.contentDocument);walk(f.contentDocument)}}catch(e){}});walk(document);
 const text=docs.map(d=>d.body?d.body.innerText:'').join('\\n\\n').slice(0,400000);
-const links=[];docs.forEach(d=>d.querySelectorAll('a[href]').forEach(a=>{if(/^https?:/.test(a.href)){const row=a.closest('tr,li,[role=row]')||a.parentElement;links.push({href:a.href,text:(a.innerText||a.title||'').trim().slice(0,200),row:(row&&row.innerText||'').replace(/\\s+/g,' ').slice(0,500)})}}));
-const cand=links.filter(l=>{try{return new URL(l.href).origin===location.origin&&/\\.pdf|document|download|file|viewer|getfile|מסמך|החלטה/i.test(l.href+' '+l.text)}catch(e){return false}}).slice(0,40);
-const files=[];for(const l of cand){try{const r=await fetch(l.href,{credentials:'include'});const ct=r.headers.get('content-type')||'';if(/pdf|msword|officedocument|octet-stream/i.test(ct)){const b=await r.blob();if(b.size>500&&b.size<25e6)files.push({linkText:l.text,rowText:l.row,name:(l.text||'מסמך').replace(/[\\\\/:*?"<>|]/g,' ').slice(0,90)+(/pdf/i.test(ct)?'.pdf':/word|officedocument/i.test(ct)?'.docx':''),type:ct,blob:b,href:l.href})}}catch(e){}}
-payload={url:location.href,title:document.title,text,links:links.slice(0,600),files};trySend();try{w.postMessage('nh-ping',O)}catch(e){}})()`;
+const KEY=/\\.pdf|document|download|getfile|viewer|showdoc|מסמך|החלטה|פסק|פרוטוקול|צפ(י|ה)|הצג|הורד/i,BAD=/מחק|מחיקה|הגש|שלח|בטל|אשר|עדכן|הוסף|צור|הסר|התנתק|יציאה/;
+const els=[],diag=[];docs.forEach(d=>d.querySelectorAll('a,button,input[type=image],input[type=button],img[onclick],[onclick]').forEach(el=>els.push(el)));
+const info=el=>{const row=el.closest('tr,li,[role=row]')||el.parentElement;const img=el.querySelector&&el.querySelector('img');
+ return{t:(el.innerText||el.title||el.alt||el.value||(img&&(img.alt||img.title))||'').trim().replace(/\\s+/g,' ').slice(0,120),h:el.getAttribute('href')||'',oc:el.getAttribute('onclick')||'',img:img?img.getAttribute('src')||'':'',row:(row&&row.innerText||'').replace(/\\s+/g,' ').slice(0,300)}};
+const fileOf=async(r,meta,depth)=>{const ct=r.headers.get('content-type')||'';
+ if(/pdf|msword|officedocument|octet-stream/i.test(ct)){const b=await r.blob();if(b.size>500&&b.size<25e6){const cd=r.headers.get('content-disposition')||'';let fn='';try{fn=decodeURIComponent((cd.match(/filename\\*?=(?:UTF-8'')?"?([^";]+)/i)||[])[1]||'').trim()}catch(e){}
+   return{linkText:meta.t,rowText:meta.row,name:(fn||((meta.t||'מסמך').replace(/[\\\\/:*?"<>|]/g,' ').slice(0,90)+(/pdf/i.test(ct)?'.pdf':/word|officedocument/i.test(ct)?'.docx':''))),type:ct,blob:b,href:meta.key}}}
+ if(/html/i.test(ct)&&!depth){const h=await r.text();const m=h.match(/(?:src|href|data)=["']([^"']+?(?:\\.pdf|getfile|showdoc|document)[^"']*)["']/i);if(m){try{const u=new URL(m[1].replace(/&amp;/g,'&'),r.url);return fileOf(await fetch(u,{credentials:'include'}),meta,1)}catch(e){}}}
+ return null};
+const files=[],seen=new Set();let tried=0;
+for(const el of els){const m=info(el);const all=m.h+' '+m.oc+' '+m.t+' '+m.img;if(!KEY.test(all)||BAD.test(m.t))continue;if(diag.length<150)diag.push(m);
+ const d=el.ownerDocument,base=d.location.href;let req=null,key='';
+ try{const pb=(m.h+' '+m.oc).match(/__doPostBack\\(\\s*['"]([^'"]*)['"]\\s*,\\s*['"]([^'"]*)['"]/);
+  const wo=(m.h+' '+m.oc).match(/(?:window\\.)?open\\(\\s*['"]([^'"]+)['"]/);
+  if(pb){const f=el.closest('form')||d.forms[0];if(f){const fd=new FormData(f);fd.set('__EVENTTARGET',pb[1]);fd.set('__EVENTARGUMENT',pb[2]);key='pb:'+pb[1]+'|'+pb[2];req=()=>fetch(f.action||base,{method:'POST',body:fd,credentials:'include'})}}
+  else if(wo){const u=new URL(wo[1],base);key=u.href;req=()=>fetch(u,{credentials:'include'})}
+  else if(/^https?:/i.test(el.href||'')&&new URL(el.href).origin===location.origin){key=el.href;req=()=>fetch(el.href,{credentials:'include'})}
+  if(!req||seen.has(key)||tried>=40)continue;seen.add(key);tried++;
+  const f=await fileOf(await req(),{...m,key},0);if(f)files.push(f)}catch(e){}}
+payload={url:location.href,title:document.title,text,links:[],files,diag};trySend();try{w.postMessage('nh-ping',O)}catch(e){}})()`;
 }
 function caseByNumber(no){return [...S.cases.values()].find(c=>c.number&&no&&(c.number===no||c.number.includes(no)||no.includes(c.number)))}
 function guessCaseForText(s){const m=[...String(s||'').matchAll(/(\d{3,6}-\d{2}-\d{2})/g)].map(x=>x[1]);for(const n of m){const c=caseByNumber(n);if(c)return c}return null}
@@ -1127,7 +1145,23 @@ async function renderNH(){
       <li>נפתח חלון קטן. הוא <b>מוריד כל החלטה, מזהה לאיזה תיק היא שייכת לפי מספר ההליך, ושומר אותה בתיק</b>. מועדים שכתובים בהחלטה ("תוך 10 ימים", "עד ליום…") ודיונים מהיומן נוספים לבד, מסומנים "לאמת".</li>
       <li>מה שלא זוהה נשאר כאן לשיוך ידני.</li></ol>
     <p class="note"><b>אם הכפתור כבר נמצא אצלכם בסרגל, גררו אותו שוב</b> (ומחקו את הישן), כדי לקבל את הגרסה החדשה שלו. הכפתור קורא רק את מה שמוצג לכם על המסך, בחשבון שלכם. הוא לא מגיש ולא משנה דבר בנט המשפט. אם מסמכים לא נשמרו אוטומטית, הורידו אותם מנט המשפט וגררו אותם לכרטיס התיק.</p></div>
+  <div class="card"><h3>משיכה עם התוסף של Claude בכרום</h3>
+    <p>אם התוסף <b>Claude in Chrome</b> מצליח לקרוא את נט המשפט, תנו לו לעשות את כל העבודה:</p>
+    <ol style="margin:0;padding-inline-start:20px;display:flex;flex-direction:column;gap:6px">
+      <li>היכנסו לנט המשפט עם הכרטיס החכם.</li>
+      <li>לחצו <button class="btn sm" type="button" id="ciCopy">העתק הנחיה ל-Claude</button></li>
+      <li>פתחו את התוסף של Claude בכרום, הדביקו ושלחו.</li>
+      <li>Claude יעבור על ההחלטות והיומן, יפתח את דף הקליטה של המערכת ויקלוט הכול. כל החלטה תתויק בתיק שלה, עם המועדים.</li></ol>
+    <p class="note">דף הקליטה: <span id="ciUrl" dir="ltr"></span></p></div>
   <div class="card" style="grid-column:1/-1"><h3>עמודים שנשמרו</h3><div id="nhList"><p class="muted">טוען…</p></div></div></div>`;
+  const ciUrl=location.origin+'/claude-import';if($('#ciUrl'))$('#ciUrl').textContent=ciUrl;
+  $('#ciCopy')?.addEventListener('click',async()=>{const t=`אני מחובר לנט המשפט בכרום. עבור על ההחלטות החדשות (משבוע אחרון) ועל יומן הדיונים שלי בנט המשפט, בלי לשנות או להגיש שום דבר באתר.
+לכל החלטה: מספר ההליך (למשל 12345-01-26), תאריך ההחלטה, הכותרת, והטקסט המלא של ההחלטה. אם יש בה מועד ("תוך X ימים", "עד ליום"), חשב אותו: ימים קלנדריים מיום ההחלטה, בלי 16.7–31.8, ומועד שנופל בשישי/שבת עובר לראשון.
+לכל דיון ביומן: מספר ההליך, תאריך, שעה וסוג הדיון.
+אחר כך פתח בלשונית חדשה את ${ciUrl}, הדבק בתיבה "הנתונים מנט המשפט" רשימת JSON בדיוק בפורמט הזה, ולחץ "קלוט":
+[{"case":"12345-01-26","title":"החלטה","date":"YYYY-MM-DD","text":"הטקסט המלא","deadlines":[{"due":"YYYY-MM-DD","kind":"response","title":"הגשת תגובה","how":"10 ימים מיום ההחלטה"}]},{"type":"hearing","case":"12345-01-26","date":"YYYY-MM-DD","time":"09:30","title":"קדם משפט"}]
+סוגי מועד (kind): hearing, defense, response, reply, affidavits, discovery, submission, appeal.
+בסוף הראה לי את הסיכום שמופיע בדף הקליטה.`;toast(await copyText(t)?'ההנחיה הועתקה. הדביקו אותה בתוסף של Claude.':'ההעתקה נכשלה')});
   $('#bmCopy')?.addEventListener('click',async()=>{toast(await copyText(href)?'הועתק. עכשיו הוסיפו סימנייה חדשה והדביקו בשדה הכתובת.':'ההעתקה לא הצליחה. לחצו על הכפתור הכחול עם לחצן ימני ← העתק כתובת קישור.')});
   let items=[];try{items=(await api('GET','/api/c/inbox?lite=1')).sort((a,b)=>(b.capturedAt||'').localeCompare(a.capturedAt||''))}catch(e){}
   const el=$('#nhList');if(!el)return;
@@ -1149,9 +1183,11 @@ async function nhSheet(id){
       <select data-fk="${k}" aria-label="סוג" style="width:auto">${DOC_KINDS.map(x=>`<option ${x===guessDocKind(f.name)||(x==='החלטה'&&guessDocKind(f.name)==='אחר')?'selected':''}>${x}</option>`).join('')}</select>
       ${f.savedDocId?'<span class="chip ok">נשמר בתיק</span>':`<button class="btn sm" type="button" data-fs="${k}">שמור לתיק</button>`}</li>`}).join('')}</ul>`:'<p class="muted">לא הגיעו קבצים מהעמוד הזה. אם יש בו החלטות, הורידו אותן מנט המשפט וגררו לכרטיס התיק.</p>'}
     <h3>מועדים שזוהו בטקסט העמוד</h3><div id="props"></div>
+    ${!files.length?`<div class="banner" style="margin:0"><span>בעמוד הזה לא נמצאו החלטות להורדה. כדי שאתאים את הכפתור לנט המשפט: לחצו "העתק נתוני אבחון" והדביקו לי בשיחה עם Claude. (הנתונים כוללים את שמות הכפתורים בעמוד ושורות הטבלה, כולל מספרי תיקים.)</span><button class="btn sm" type="button" id="diagCopy">העתק נתוני אבחון</button></div>`:''}
     <details><summary class="muted" style="cursor:pointer">הטקסט המלא של העמוד</summary><textarea readonly class="draft">${esc(it.text||'')}</textarea></details>
     <div class="actions"><button class="btn ghost" type="button" data-act="nhDone" data-id="${esc(id)}">סמן כטופל</button><button class="btn ghost" type="button" data-close>סגור</button></div>`,
   o=>{
+    o.querySelector('#diagCopy')?.addEventListener('click',async()=>{const t=JSON.stringify({url:it.url,title:it.title,controls:it.diag||[]},null,1);toast(await copyText(t)?'הועתק. הדביקו בשיחה עם Claude.':'ההעתקה נכשלה')});
     renderProps();
     o.querySelectorAll('[data-fs]').forEach(b=>b.addEventListener('click',async()=>{const k=+b.dataset.fs,f=files[k],cid=o.querySelector(`[data-fc="${k}"]`).value;
       if(!cid){toast('בחרו תיק');return}b.disabled=true;b.textContent='קורא…';
