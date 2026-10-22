@@ -1115,13 +1115,20 @@ async function renderNH(){
   $V().innerHTML=`<div class="cols">
   <div class="card"><h3>שמירת עמודים מנט המשפט</h3>
     <ol style="margin:0;padding-inline-start:20px;display:flex;flex-direction:column;gap:6px">
-      <li>הכפתור הזה צריך להיות בסרגל הסימניות של הדפדפן. גררו אותו לשם פעם אחת (אם הסרגל מוסתר: Ctrl+Shift+B):<br><a class="btn" href="${href}" onclick="event.preventDefault();toast('גררו את הכפתור לסרגל הסימניות, אל תלחצו עליו כאן')" style="margin-top:6px">שמור מנט המשפט</a></li>
+      <li>הכפתור הזה צריך להיות בסרגל הסימניות של הדפדפן. גררו אותו לשם פעם אחת (אם הסרגל מוסתר: Ctrl+Shift+B):<br><a class="btn" href="${href}" onclick="event.preventDefault();toast('גררו את הכפתור לסרגל הסימניות, אל תלחצו עליו כאן')" style="margin-top:6px">שמור מנט המשפט</a>
+        <details style="margin-top:8px"><summary style="cursor:pointer;font-weight:700">הגרירה לא עובדת? הוספה ידנית</summary>
+          <ol style="margin:6px 0 0;padding-inline-start:20px;display:flex;flex-direction:column;gap:4px">
+            <li>לחצו כאן: <button class="btn sm" type="button" id="bmCopy">העתק את הכפתור</button></li>
+            <li>בסרגל הסימניות של הדפדפן לחצו <b>לחצן ימני</b> ← <b>"הוסף דף…"</b> (בכרום: Add page; באדג׳: Add favorite).</li>
+            <li>בשדה <b>שם</b> כתבו: שמור מנט המשפט</li>
+            <li>בשדה <b>כתובת</b> (URL) מחקו את מה שיש, הדביקו (Ctrl+V) ולחצו <b>שמור</b>.</li></ol></details></li>
       <li>היכנסו לנט המשפט עם הכרטיס החכם, כרגיל.</li>
       <li>פתחו עמוד: היומן, רשימת ההחלטות, או תיק מסוים. לחצו על <b>שמור מנט המשפט</b> בסרגל הסימניות.</li>
       <li>נפתח חלון קטן. הוא <b>מוריד כל החלטה, מזהה לאיזה תיק היא שייכת לפי מספר ההליך, ושומר אותה בתיק</b>. מועדים שכתובים בהחלטה ("תוך 10 ימים", "עד ליום…") ודיונים מהיומן נוספים לבד, מסומנים "לאמת".</li>
       <li>מה שלא זוהה נשאר כאן לשיוך ידני.</li></ol>
     <p class="note"><b>אם הכפתור כבר נמצא אצלכם בסרגל, גררו אותו שוב</b> (ומחקו את הישן), כדי לקבל את הגרסה החדשה שלו. הכפתור קורא רק את מה שמוצג לכם על המסך, בחשבון שלכם. הוא לא מגיש ולא משנה דבר בנט המשפט. אם מסמכים לא נשמרו אוטומטית, הורידו אותם מנט המשפט וגררו אותם לכרטיס התיק.</p></div>
   <div class="card" style="grid-column:1/-1"><h3>עמודים שנשמרו</h3><div id="nhList"><p class="muted">טוען…</p></div></div></div>`;
+  $('#bmCopy')?.addEventListener('click',async()=>{toast(await copyText(href)?'הועתק. עכשיו הוסיפו סימנייה חדשה והדביקו בשדה הכתובת.':'ההעתקה לא הצליחה. לחצו על הכפתור הכחול עם לחצן ימני ← העתק כתובת קישור.')});
   let items=[];try{items=(await api('GET','/api/c/inbox?lite=1')).sort((a,b)=>(b.capturedAt||'').localeCompare(a.capturedAt||''))}catch(e){}
   const el=$('#nhList');if(!el)return;
   const open=items.filter(i=>i.status!=='done');
