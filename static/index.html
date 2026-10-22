@@ -864,7 +864,7 @@ function taskForm(t,caseId){
     <p class="note" style="grid-column:1/-1">${p&&p.e?`לפי ההגדרות: לעבוד על זה מ־${fmt(p.start)} עד ${fmt(p.end)}, ולהגיש עד ${fmt(t.due)}. יום אחד לפני המועד נשמר לבדיקה ולהגשה.`:'משימה בלי ימי עבודה תופיע רק ביום המועד.'}</p>
     <datalist id="ppl2">${people().map(p=>`<option value="${esc(p)}">`).join('')}</datalist>
     <div class="actions" style="grid-column:1/-1"><button class="btn" type="submit">שמור</button><button class="btn ghost" type="button" data-close>ביטול</button>${t.id?'<button class="btn danger" type="button" id="delT">מחק מועד</button>':''}</div></form>`,
-  o=>{o.querySelector('#tf').addEventListener('submit',async e=>{e.preventDefault();const d=Object.fromEntries(new FormData(e.target));if(d.effort==='')d.effort=null;else d.effort=+d.effort;await saveTask(t.id,{...d,source:t.source||'ידני',done:!!t.done});o.remove();toast('המועד נשמר')});
+  o=>{o.querySelector('#tf').addEventListener('submit',async e=>{e.preventDefault();const d=Object.fromEntries(new FormData(e.target));if(d.effort==='')d.effort=null;else d.effort=+d.effort;await saveTask(t.id,{...d,source:t.source||'ידני',done:!!t.done,verify:false});o.remove();toast('המועד נשמר')});
     o.querySelector('#delT')?.addEventListener('click',async ev=>{const b=ev.target;if(b.dataset.sure){await S.db.doc('tasks/'+t.id).delete();o.remove();toast('המועד נמחק')}else{b.dataset.sure=1;b.textContent='לחצו שוב לאישור המחיקה'}})});
 }
 function docListHTML(docs){return docs.length?`<ul class="docs">${docs.map(d=>`<li><span class="chip">${esc(d.kind||'אחר')}</span><span class="nm">${esc(d.name)}</span><span class="muted">${(d.chars||0).toLocaleString('he-IL')} תווים${d.truncated?' (נשמר חלקית)':''}</span>${d.assetUrl?`<a class="btn ghost sm" href="${esc(d.assetUrl)}" target="_blank" rel="noopener">פתח</a>`:''}<button class="btn ghost sm" type="button" data-act="viewDoc" data-id="${esc(d.id)}">הצג טקסט</button>${S.canWrite?`<button class="btn danger sm adm-only" type="button" data-act="delDoc" data-id="${esc(d.id)}">מחק</button>`:''}</li>`).join('')}</ul>`:'<p class="muted">עדיין אין מסמכים בתיק. הוסיפו החלטות, כתבי טענות ופרוטוקולים, והטיוטות ייכתבו על בסיסם.</p>'}
@@ -879,7 +879,7 @@ function taskCard(t,{showCase=true,mode=''}={}){
   return `<article class="tcard s-${sev}">
     <div class="tc-top"><b class="tc-when">${head}</b><span class="tc-date">${t.kind==='hearing'?'דיון ':''}${fmt(t.due)}${t.time?' · '+esc(t.time):''}</span></div>
     <div class="tc-body">
-      <div class="tc-chips"><span class="chip ${t.kind==='hearing'?'hear':k.crit?'crit':''}">${esc(k.l)}</span>${isNew?'<span class="chip new">חדש לך</span>':''}</div>
+      <div class="tc-chips"><span class="chip ${t.kind==='hearing'?'hear':k.crit?'crit':''}">${esc(k.l)}</span>${isNew?'<span class="chip new">חדש לך</span>':''}${t.verify&&!t.done?'<span class="chip prep" title="נוסף אוטומטית מנט המשפט. בדקו את המועד ולחצו עריכה ← שמור כדי לאשר">לאמת</span>':''}</div>
       <h4 class="tc-title" data-act="editTask" data-id="${esc(t.id)}" title="${esc(t.title||k.l)}">${esc(t.title||k.l)}</h4>
       ${showCase&&c?`<button type="button" class="tc-case" data-act="case" data-id="${esc(c.id)}">📁 ${esc(caseLabel(c))}<small>${esc([c.procType,c.number].filter(Boolean).join(' '))}</small></button>`:''}
       ${sub?`<div class="tc-sub">${sub}</div>${w?progBar(w):''}`:''}
@@ -1103,9 +1103,9 @@ let ready=false,sent=false,payload=null;const trySend=()=>{if(ready&&payload&&!s
 addEventListener('message',e=>{if(e.source===w&&e.data==='nh-ready'){ready=true;trySend()}});
 const docs=[document];document.querySelectorAll('iframe,frame').forEach(f=>{try{if(f.contentDocument)docs.push(f.contentDocument)}catch(e){}});
 const text=docs.map(d=>d.body?d.body.innerText:'').join('\\n\\n').slice(0,400000);
-const links=[];docs.forEach(d=>d.querySelectorAll('a[href]').forEach(a=>{if(/^https?:/.test(a.href))links.push({href:a.href,text:(a.innerText||a.title||'').trim().slice(0,200)})}));
+const links=[];docs.forEach(d=>d.querySelectorAll('a[href]').forEach(a=>{if(/^https?:/.test(a.href)){const row=a.closest('tr,li,[role=row]')||a.parentElement;links.push({href:a.href,text:(a.innerText||a.title||'').trim().slice(0,200),row:(row&&row.innerText||'').replace(/\\s+/g,' ').slice(0,500)})}}));
 const cand=links.filter(l=>{try{return new URL(l.href).origin===location.origin&&/\\.pdf|document|download|file|viewer|getfile|מסמך|החלטה/i.test(l.href+' '+l.text)}catch(e){return false}}).slice(0,40);
-const files=[];for(const l of cand){try{const r=await fetch(l.href,{credentials:'include'});const ct=r.headers.get('content-type')||'';if(/pdf|msword|officedocument|octet-stream/i.test(ct)){const b=await r.blob();if(b.size>500&&b.size<25e6)files.push({name:(l.text||'מסמך').replace(/[\\\\/:*?"<>|]/g,' ').slice(0,90)+(/pdf/i.test(ct)?'.pdf':/word|officedocument/i.test(ct)?'.docx':''),type:ct,blob:b,href:l.href})}}catch(e){}}
+const files=[];for(const l of cand){try{const r=await fetch(l.href,{credentials:'include'});const ct=r.headers.get('content-type')||'';if(/pdf|msword|officedocument|octet-stream/i.test(ct)){const b=await r.blob();if(b.size>500&&b.size<25e6)files.push({linkText:l.text,rowText:l.row,name:(l.text||'מסמך').replace(/[\\\\/:*?"<>|]/g,' ').slice(0,90)+(/pdf/i.test(ct)?'.pdf':/word|officedocument/i.test(ct)?'.docx':''),type:ct,blob:b,href:l.href})}}catch(e){}}
 payload={url:location.href,title:document.title,text,links:links.slice(0,600),files};trySend();try{w.postMessage('nh-ping',O)}catch(e){}})()`;
 }
 function caseByNumber(no){return [...S.cases.values()].find(c=>c.number&&no&&(c.number===no||c.number.includes(no)||no.includes(c.number)))}
@@ -1118,15 +1118,16 @@ async function renderNH(){
       <li>הכפתור הזה צריך להיות בסרגל הסימניות של הדפדפן. גררו אותו לשם פעם אחת (אם הסרגל מוסתר: Ctrl+Shift+B):<br><a class="btn" href="${href}" onclick="event.preventDefault();toast('גררו את הכפתור לסרגל הסימניות, אל תלחצו עליו כאן')" style="margin-top:6px">שמור מנט המשפט</a></li>
       <li>היכנסו לנט המשפט עם הכרטיס החכם, כרגיל.</li>
       <li>פתחו עמוד: היומן, רשימת ההחלטות, או תיק מסוים. לחצו על <b>שמור מנט המשפט</b> בסרגל הסימניות.</li>
-      <li>נפתח חלון קטן שמאשר את השמירה. העמוד והמסמכים המצורפים אליו מופיעים כאן, לבדיקה ולשיוך לתיקים.</li></ol>
-    <p class="note">הכפתור קורא רק את מה שמוצג לכם על המסך, בחשבון שלכם. הוא לא מגיש ולא משנה דבר בנט המשפט. אם מסמכים לא נשמרו אוטומטית, הורידו אותם מנט המשפט וגררו אותם לכרטיס התיק.</p></div>
+      <li>נפתח חלון קטן. הוא <b>מוריד כל החלטה, מזהה לאיזה תיק היא שייכת לפי מספר ההליך, ושומר אותה בתיק</b>. מועדים שכתובים בהחלטה ("תוך 10 ימים", "עד ליום…") ודיונים מהיומן נוספים לבד, מסומנים "לאמת".</li>
+      <li>מה שלא זוהה נשאר כאן לשיוך ידני.</li></ol>
+    <p class="note"><b>אם הכפתור כבר נמצא אצלכם בסרגל, גררו אותו שוב</b> (ומחקו את הישן), כדי לקבל את הגרסה החדשה שלו. הכפתור קורא רק את מה שמוצג לכם על המסך, בחשבון שלכם. הוא לא מגיש ולא משנה דבר בנט המשפט. אם מסמכים לא נשמרו אוטומטית, הורידו אותם מנט המשפט וגררו אותם לכרטיס התיק.</p></div>
   <div class="card" style="grid-column:1/-1"><h3>עמודים שנשמרו</h3><div id="nhList"><p class="muted">טוען…</p></div></div></div>`;
   let items=[];try{items=(await api('GET','/api/c/inbox?lite=1')).sort((a,b)=>(b.capturedAt||'').localeCompare(a.capturedAt||''))}catch(e){}
   const el=$('#nhList');if(!el)return;
   const open=items.filter(i=>i.status!=='done');
   if(!items.length){el.innerHTML='<p class="muted">עדיין לא נשמרו עמודים.</p>';return}
   el.innerHTML=items.map(i=>`<div class="card" style="margin-bottom:10px;${i.status==='done'?'opacity:.6':''}"><div class="row" style="justify-content:space-between"><b>${esc(i.title||'עמוד מנט המשפט')}</b><span class="muted">${esc((i.capturedAt||'').replace('T',' ').slice(0,16))} · ${esc(i.by||'')}</span></div>
-    <div class="row">${i.status==='done'?'<span class="chip ok">טופל</span>':'<span class="chip prep">ממתין לבדיקה</span>'}<span class="muted">${(i.files||[]).length} מסמכים</span>
+    <div class="row">${i.status==='done'?'<span class="chip ok">טופל</span>':'<span class="chip prep">ממתין לבדיקה</span>'}<span class="muted">${i.auto?`${i.auto.docs} החלטות נשמרו בתיקים · ${i.auto.tasks} מועדים נוספו${i.auto.left?` · <b>${i.auto.left} לשיוך ידני</b>`:''}`:`${(i.files||[]).length} מסמכים`}</span>
     <button class="btn sm" type="button" data-act="nhOpen" data-id="${esc(i.id)}">בדוק ושייך</button>${i.status!=='done'?`<button class="btn ghost sm" type="button" data-act="nhDone" data-id="${esc(i.id)}">סמן כטופל</button>`:''}<button class="btn danger sm" type="button" data-act="nhDel" data-id="${esc(i.id)}">מחק</button></div></div>`).join('');
   $('#nhCount').textContent=open.length?`(${open.length})`:'';
 }
@@ -1136,7 +1137,7 @@ async function nhSheet(id){
   const files=it.files||[];
   const o=sheet(`<h2>${esc(it.title||'עמוד מנט המשפט')}</h2><p class="muted" style="overflow-wrap:anywhere">${esc(it.url||'')}</p>
     <h3>מסמכים שהגיעו (${files.length})</h3>
-    ${files.length?`<ul class="docs">${files.map((f,k)=>{const g=guessCaseForText(f.name+' '+(f.linkText||''))||guessCaseForText(it.text);return `<li><span class="nm"><a href="/files/${esc(f.fileId)}" target="_blank" rel="noopener">${esc(f.name)}</a></span>
+    ${files.length?`<ul class="docs">${files.map((f,k)=>{const g=guessCaseForText((f.rowText||'')+' '+f.name+' '+(f.linkText||''))||guessCaseForText(it.text);return `<li><span class="nm"><a href="/files/${esc(f.fileId)}" target="_blank" rel="noopener">${esc(f.name)}</a></span>
       <select data-fc="${k}" aria-label="תיק" style="width:auto;max-width:220px"><option value="">בחרו תיק…</option>${caseOptions(g?.id)}</select>
       <select data-fk="${k}" aria-label="סוג" style="width:auto">${DOC_KINDS.map(x=>`<option ${x===guessDocKind(f.name)||(x==='החלטה'&&guessDocKind(f.name)==='אחר')?'selected':''}>${x}</option>`).join('')}</select>
       ${f.savedDocId?'<span class="chip ok">נשמר בתיק</span>':`<button class="btn sm" type="button" data-fs="${k}">שמור לתיק</button>`}</li>`}).join('')}</ul>`:'<p class="muted">לא הגיעו קבצים מהעמוד הזה. אם יש בו החלטות, הורידו אותן מנט המשפט וגררו לכרטיס התיק.</p>'}

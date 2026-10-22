@@ -33,7 +33,8 @@ INSTRUCTIONS = """אתה עוזר במשרד עורכי דין ישראלי, ו�
 - כשמבקשים "מה דחוף" או "מה יש היום", התחל בכלי overview.
 - כשמזכירים תיק בשם או במספר, אתר אותו עם find_cases או get_case. אם יש כמה התאמות, שאל לאיזה התכוונו.
 - לניסוח טיוטה: קרא את החומר עם get_case_documents, נסח בעברית משפטית לפי תקסד"א התשע"ט-2018 והנוהג, אל תמציא עובדות או פסיקה, סמן חסרים ב-[להשלים: ...] ואסמכתאות לא ודאיות ב-[לאמת אסמכתא]. אחר כך הצע לשמור עם save_draft.
-- כל שינוי שאתה עושה נרשם ביומן התיק בשם "Claude"."""
+- כל שינוי שאתה עושה נרשם ביומן התיק בשם "Claude".
+- "סנכרון נט המשפט": המשתמש מחובר לנט המשפט בכרום עם הכרטיס החכם. עבור (עם Claude in Chrome) על ההחלטות והדיונים החדשים, ולכל החלטה: זהה את התיק לפי מספר ההליך, קרא את הטקסט המלא, ותייק עם add_case_document כולל המועדים שבה. דיונים מהיומן הוסף עם create_task (kind=hearing). בסוף הצג טבלת סיכום: תיק, מה תויק, אילו מועדים נוספו, ומה לא זוהה. אל תגיש ואל תשנה דבר בנט המשפט עצמו."""
 
 
 # ---------- data access (same tables the office server uses) ----------
@@ -448,6 +449,34 @@ def t_save_draft(a):
     return {"ok": True, "message": "הטיוטה נשמרה. אפשר לפתוח אותה במערכת דרך כפתור ✎ טיוטה."}
 
 
+def t_add_case_document(a):
+    """Files a decision or other court document in a case, with its deadlines, skipping documents already filed."""
+    c = find_case(a.get("case"))
+    name = str(a.get("name") or "החלטה").strip()[:120]
+    text = str(a.get("text") or "")
+    given = check_date(a.get("date"), "תאריך המסמך") or today()
+    kind = a.get("kind") or "החלטה"
+    for d in rows("docs"):
+        if d.get("caseId") == c["id"] and (d.get("name") == name and d.get("docDate") == given or (text and d.get("text", "")[:300] == text[:300])):
+            return {"ok": True, "duplicate": True, "message": f"המסמך כבר קיים בתיק {c.get('client')}"}
+    did = new_id()
+    put("docs", did, {"caseId": c["id"], "name": name, "kind": kind, "docDate": given, "text": text[:100000],
+                      "truncated": len(text) > 100000, "chars": len(text), "pages": 0, "source": "נט המשפט",
+                      "href": a.get("url", ""), "uploadedAt": now(), "by": BY})
+    added = []
+    for dl in a.get("deadlines") or []:
+        due = check_date(dl.get("due"), "מועד")
+        k = dl.get("kind") if dl.get("kind") in KINDS else "submission"
+        if not due or any(t.get("caseId") == c["id"] and not t.get("done") and t.get("due") == due and t.get("kind") == k for t in rows("tasks")):
+            continue
+        new_task({"caseId": c["id"], "kind": k, "title": dl.get("title") or KINDS[k], "due": due, "time": dl.get("time", ""),
+                  "assignee": c.get("owner", ""), "source": "נט המשפט", "verify": True,
+                  "note": f"מתוך {kind} מיום {given}. {dl.get('how', '')} — לאמת".strip()})
+        added.append(due)
+    log_to("cases", c["id"], f"התקבלה {kind} מיום {given} מנט המשפט" + (f", נוספו {len(added)} מועדים" if added else ""))
+    return {"ok": True, "case": c.get("client"), "document_id": did, "deadlines_added": added}
+
+
 def t_list_people(a):
     p = get("settings", "people") or {}
     return {"people": p.get("list") or (get("settings", "main") or {}).get("people", [])}
@@ -499,6 +528,13 @@ TOOLS = [
      {"case": S_CASE, "deal": S_DEAL, "max_chars": {"type": "integer"}}, []),
     ("save_draft", "שמירת טיוטה בתיק או בעסקה, כדי שתופיע במערכת.", t_save_draft,
      {"case": S_CASE, "deal": S_DEAL, "doc_type": {"type": "string"}, "text": {"type": "string"}, "task_id": {"type": "string"}}, ["text"]),
+    ("add_case_document", "תיוק החלטה / פסק דין / פרוטוקול מנט המשפט בתיק: הטקסט המלא נשמר במסמכי התיק, ומועדים שבהחלטה נוספים כמשימות מסומנות 'לאמת'. "
+     "חשב מועדים: 'תוך X ימים' = X ימים קלנדריים מיום ההחלטה, בלי ימי פגרת קיץ (16.7–31.8), ומועד שנופל בשישי/שבת עובר לראשון. מסמך שכבר תויק לא ישוכפל.", t_add_case_document,
+     {"case": S_CASE, "name": {"type": "string", "description": "למשל: החלטה מיום 20.10.2026"}, "kind": {"type": "string", "enum": ["החלטה", "פסק דין", "פרוטוקול", "זימון לדיון", "אחר"]},
+      "date": S_DATE, "text": {"type": "string", "description": "הטקסט המלא של המסמך"}, "url": {"type": "string"},
+      "deadlines": {"type": "array", "items": {"type": "object", "properties": {"due": S_DATE, "kind": {"type": "string", "enum": list(KINDS)},
+                                                                             "title": {"type": "string"}, "time": {"type": "string"}, "how": {"type": "string"}}}}},
+     ["case", "text"]),
     ("list_people", "שמות העובדים במשרד (לשיוך משימות).", t_list_people, {}, []),
 ]
 BY_NAME = {t[0]: t for t in TOOLS}
