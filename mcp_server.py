@@ -34,7 +34,7 @@ INSTRUCTIONS = """אתה עוזר במשרד עורכי דין ישראלי, ו�
 - כשמזכירים תיק בשם או במספר, אתר אותו עם find_cases או get_case. אם יש כמה התאמות, שאל לאיזה התכוונו.
 - לניסוח טיוטה: קרא את החומר עם get_case_documents, נסח בעברית משפטית לפי תקסד"א התשע"ט-2018 והנוהג, אל תמציא עובדות או פסיקה, סמן חסרים ב-[להשלים: ...] ואסמכתאות לא ודאיות ב-[לאמת אסמכתא]. אחר כך הצע לשמור עם save_draft.
 - כל שינוי שאתה עושה נרשם ביומן התיק בשם "Claude".
-- "סנכרון נט המשפט": המשתמש מחובר לנט המשפט בכרום עם הכרטיס החכם. עבור (עם Claude in Chrome) על ההחלטות והדיונים החדשים, ולכל החלטה: זהה את התיק לפי מספר ההליך, קרא את הטקסט המלא, ותייק עם add_case_document כולל המועדים שבה. דיונים מהיומן הוסף עם create_task (kind=hearing). בסוף הצג טבלת סיכום: תיק, מה תויק, אילו מועדים נוספו, ומה לא זוהה. אל תגיש ואל תשנה דבר בנט המשפט עצמו."""
+- "סנכרון נט המשפט": המשתמש מחובר לנט המשפט בכרום עם הכרטיס החכם. עבור (עם Claude in Chrome) על ההחלטות והדיונים החדשים, ולכל מסמך חדש (החלטות, פסקי דין, פרוטוקולים, כתבי טענות, בקשות, תגובות, תצהירים): זהה את התיק לפי מספר ההליך, קרא את הטקסט המלא, ותייק עם add_case_document עם הסוג (kind) ומי הגיש (filed_by). מועדים הוסף רק מתוך החלטות ופסקי דין. דיונים מהיומן הוסף עם create_task (kind=hearing). בסוף הצג טבלת סיכום: תיק, מה תויק, אילו מועדים נוספו, ומה לא זוהה. אל תגיש ואל תשנה דבר בנט המשפט עצמו."""
 
 
 # ---------- data access (same tables the office server uses) ----------
@@ -452,7 +452,9 @@ def t_save_draft(a):
 def t_add_case_document(a):
     """Files a decision or other court document in a case, with its deadlines, skipping documents already filed."""
     c = find_case(a.get("case"))
-    name = str(a.get("name") or "החלטה").strip()[:120]
+    name = str(a.get("name") or a.get("kind") or "החלטה").strip()[:120]
+    if a.get("filed_by") and a["filed_by"] not in name:
+        name = f"{name} — {a['filed_by']}"
     text = str(a.get("text") or "")
     given = check_date(a.get("date"), "תאריך המסמך") or today()
     kind = a.get("kind") or "החלטה"
@@ -461,7 +463,7 @@ def t_add_case_document(a):
             return {"ok": True, "duplicate": True, "message": f"המסמך כבר קיים בתיק {c.get('client')}"}
     did = new_id()
     put("docs", did, {"caseId": c["id"], "name": name, "kind": kind, "docDate": given, "text": text[:100000],
-                      "truncated": len(text) > 100000, "chars": len(text), "pages": 0, "source": "נט המשפט",
+                      "truncated": len(text) > 100000, "chars": len(text), "pages": 0, "source": "נט המשפט", "filedBy": a.get("filed_by", ""),
                       "href": a.get("url", ""), "uploadedAt": now(), "by": BY})
     added = []
     for dl in a.get("deadlines") or []:
@@ -473,7 +475,7 @@ def t_add_case_document(a):
                   "assignee": c.get("owner", ""), "source": "נט המשפט", "verify": True,
                   "note": f"מתוך {kind} מיום {given}. {dl.get('how', '')} — לאמת".strip()})
         added.append(due)
-    log_to("cases", c["id"], f"התקבלה {kind} מיום {given} מנט המשפט" + (f", נוספו {len(added)} מועדים" if added else ""))
+    log_to("cases", c["id"], f"התקבל מנט המשפט: {name} ({given})" + (f", נוספו {len(added)} מועדים" if added else ""))
     return {"ok": True, "case": c.get("client"), "document_id": did, "deadlines_added": added}
 
 
@@ -528,9 +530,10 @@ TOOLS = [
      {"case": S_CASE, "deal": S_DEAL, "max_chars": {"type": "integer"}}, []),
     ("save_draft", "שמירת טיוטה בתיק או בעסקה, כדי שתופיע במערכת.", t_save_draft,
      {"case": S_CASE, "deal": S_DEAL, "doc_type": {"type": "string"}, "text": {"type": "string"}, "task_id": {"type": "string"}}, ["text"]),
-    ("add_case_document", "תיוק החלטה / פסק דין / פרוטוקול מנט המשפט בתיק: הטקסט המלא נשמר במסמכי התיק, ומועדים שבהחלטה נוספים כמשימות מסומנות 'לאמת'. "
+    ("add_case_document", "תיוק מסמך מנט המשפט בתיק (החלטה, פסק דין, פרוטוקול, כתב טענות, בקשה, תגובה, תצהיר): הטקסט המלא נשמר במסמכי התיק, ומועדים שבהחלטה נוספים כמשימות מסומנות 'לאמת'. "
      "חשב מועדים: 'תוך X ימים' = X ימים קלנדריים מיום ההחלטה, בלי ימי פגרת קיץ (16.7–31.8), ומועד שנופל בשישי/שבת עובר לראשון. מסמך שכבר תויק לא ישוכפל.", t_add_case_document,
-     {"case": S_CASE, "name": {"type": "string", "description": "למשל: החלטה מיום 20.10.2026"}, "kind": {"type": "string", "enum": ["החלטה", "פסק דין", "פרוטוקול", "זימון לדיון", "אחר"]},
+     {"case": S_CASE, "name": {"type": "string", "description": "למשל: החלטה מיום 20.10.2026"}, "kind": {"type": "string", "enum": ["החלטה", "פסק דין", "פרוטוקול", "כתב תביעה", "כתב הגנה", "כתב תשובה", "בקשה", "תגובה", "תשובה לתגובה", "תצהיר", "חוות דעת", "הודעה", "זימון לדיון", "אחר"]},
+      "filed_by": {"type": "string", "description": "מי הגיש: הנתבעים / התובעת / בית המשפט"},
       "date": S_DATE, "text": {"type": "string", "description": "הטקסט המלא של המסמך"}, "url": {"type": "string"},
       "deadlines": {"type": "array", "items": {"type": "object", "properties": {"due": S_DATE, "kind": {"type": "string", "enum": list(KINDS)},
                                                                              "title": {"type": "string"}, "time": {"type": "string"}, "how": {"type": "string"}}}}},

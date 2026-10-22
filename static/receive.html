@@ -27,7 +27,7 @@ button{font:inherit;font-weight:700;border:0;border-radius:9px;padding:9px 16px;
   <ul id="items"></ul>
   <div><button type="button" id="closeBtn" hidden>סגור</button></div>
   <section id="ciBox" hidden>
-    <p>הדביקו כאן את מה ש-Claude אסף מנט המשפט (רשימה בפורמט JSON), ולחצו "קלוט". כל החלטה תתויק בתיק שלה, והמועדים שבה יתווספו.</p>
+    <p>הדביקו כאן את מה ש-Claude אסף מנט המשפט (רשימה בפורמט JSON), ולחצו "קלוט". כל מסמך (החלטה, כתב טענות, בקשה, תגובה) יתויק בתיק שלו עם הסוג שלו, ומועדים מתוך החלטות יתווספו.</p>
     <label for="ci"><b>הנתונים מנט המשפט</b></label>
     <textarea id="ci" aria-label="הנתונים מנט המשפט" style="width:100%;min-height:260px;font:inherit;border:1px solid var(--line);border-radius:10px;padding:10px;background:var(--surface);color:var(--ink);box-sizing:border-box" placeholder='[{"case":"6623-01-26","title":"החלטה","date":"2026-10-20","text":"הטקסט המלא של ההחלטה"},{"type":"hearing","case":"22106-01-25","date":"2026-10-27","time":"09:00","title":"קדם משפט"}]'></textarea>
     <p><button type="button" id="ciGo">קלוט</button></p>
@@ -137,11 +137,17 @@ async function save(p){
   }
   await api('PATCH','/api/c/inbox/'+inbox.id,{files,status:nLeft?'new':'done',auto:{docs:nDocs,tasks:nTasks,left:nLeft}});
   const s=$('#sum');s.hidden=false;
-  s.textContent=`${nDocs} החלטות נשמרו בתיקים · ${nTasks} מועדים ודיונים נוספו (מסומנים "לאמת")${nLeft?` · ${nLeft} לא זוהו ונשארו לבדיקה בלשונית "נט המשפט"`:''}${!(p.files||[]).length?` · בעמוד הזה לא נמצאו החלטות להורדה${(p.diag||[]).length?` (נמצאו ${p.diag.length} כפתורים שנראים קשורים למסמכים). במערכת, בלשונית נט המשפט, אפשר להעתיק "נתוני אבחון" ולשלוח ל-Claude`:''}`:''}`;
+  s.textContent=`${nDocs} מסמכים תויקו בתיקים · ${nTasks} מועדים ודיונים נוספו (מסומנים "לאמת")${nLeft?` · ${nLeft} לא זוהו ונשארו לבדיקה בלשונית "נט המשפט"`:''}${!(p.files||[]).length?` · בעמוד הזה לא נמצאו החלטות להורדה${(p.diag||[]).length?` (נמצאו ${p.diag.length} כפתורים שנראים קשורים למסמכים). במערכת, בלשונית נט המשפט, אפשר להעתיק "נתוני אבחון" ולשלוח ל-Claude`:''}`:''}`;
   say('הקליטה הסתיימה.','ok');$('#closeBtn').hidden=false;
 }
 $('#closeBtn').addEventListener('click',()=>window.close());
 /* ---------- intake for Claude in Chrome: a JSON list of decisions and hearings ---------- */
+/* the document types the case file uses */
+function docKindOf(s){s=String(s);
+  if(/פסק[ -]דין|פס"ד/.test(s))return'פסק דין';if(/פרוטוקול/.test(s))return'פרוטוקול';if(/החלטה/.test(s))return'החלטה';
+  if(/כתב תביעה/.test(s))return'כתב תביעה';if(/כתב (ה)?הגנה/.test(s))return'כתב הגנה';if(/כתב (ה)?תשובה/.test(s))return'כתב תשובה';
+  if(/תשובה לתגובה/.test(s))return'תשובה לתגובה';if(/תגוב/.test(s))return'תגובה';if(/בקשה|בר"ע|ערעור/.test(s))return'בקשה';
+  if(/תצהיר/.test(s))return'תצהיר';if(/חוות[ -]דעת/.test(s))return'חוות דעת';if(/הודעה|הודעת/.test(s))return'הודעה';return'אחר'}
 function caseByAny(ref){const r=String(ref||'').trim();if(!r)return null;return caseFor(r)||CASES.find(c=>c.status!=='סגור'&&(c.fileNo===r||c.client===r))||CASES.find(c=>c.client&&(c.client.includes(r)||r.includes(c.client)))||null}
 async function claudeImport(raw){
   let list;try{list=JSON.parse(raw.trim().replace(/^```(?:json)?|```$/g,''))}catch(e){say('הטקסט שהודבק אינו רשימת JSON תקינה. בקשו מ-Claude להחזיר את הנתונים בדיוק בפורמט שבהנחיה.','err');return}
@@ -149,23 +155,25 @@ async function claudeImport(raw){
   CASES=await api('GET','/api/c/cases');let nDocs=0,nTasks=0;const left=[];
   for(const x of list){
     const c=caseByAny(x.case||x.caseNumber||x.number||x.client);
-    const label=(x.title||(x.type==='hearing'?'דיון':'החלטה'))+(x.case?` · ${x.case}`:'');
+    const label=(x.title||x.docType||(x.type==='hearing'?'דיון':'החלטה'))+(x.case?` · ${x.case}`:'');
     if(!c){left.push(x);item(label,'לא נמצא תיק מתאים במערכת. נשמר לבדיקה בלשונית "נט המשפט".','i-warn');continue}
     try{
       if(x.type==='hearing'){const due=String(x.date||'').slice(0,10);if(due>=today()&&await addTask(c,{due,time:x.time||'',kind:'hearing',title:x.title||'דיון',how:'מופיע ביומן נט המשפט'},'נט המשפט')){nTasks++;item(`דיון: ${c.client||c.number} · ${fmt(due)} ${x.time||''}`,'נוסף ליומן','i-ok')}else item(label,'כבר קיים או שהמועד עבר','i-ok');continue}
-      const given=String(x.date||'').slice(0,10)||today(),text=String(x.text||''),name=(x.title||'החלטה')+` מיום ${fmt(given)}`;
+      const given=String(x.date||'').slice(0,10)||today(),text=String(x.text||'');
+      const kind=docKindOf(x.docType||x.title||'');const isRuling=['החלטה','פסק דין','פרוטוקול'].includes(kind);
+      const name=(x.title||kind)+(x.filedBy&&!/בית ה?משפט/.test(x.filedBy)&&!String(x.title||'').includes(x.filedBy)?` — ${x.filedBy}`:'')+` מיום ${fmt(given)}`;
       const docs=await api('GET','/api/c/docs?lite=1&f=caseId&v='+encodeURIComponent(c.id));
       if(docs.some(d=>d.name===name&&d.docDate===given)){item(label,`כבר קיים בתיק ${c.client||c.number}`,'i-ok');continue}
-      const kind=/פסק[ -]דין|פס"ד/.test(name)?'פסק דין':/פרוטוקול/.test(name)?'פרוטוקול':'החלטה';
-      await api('POST','/api/c/docs',{caseId:c.id,name,kind,docDate:given,text:text.slice(0,100000),truncated:text.length>100000,chars:text.length,pages:0,href:x.url||'',source:'נט המשפט (Claude)',uploadedAt:new Date().toISOString()});nDocs++;
-      const dls=(x.deadlines&&x.deadlines.length?x.deadlines.map(d=>({due:String(d.due).slice(0,10),time:d.time||'',kind:KL[d.kind]?d.kind:kindOf(d.title||''),title:d.title||KL[d.kind]||'מועד',how:d.how||'לפי ההחלטה'})):decisionDeadlines(text,given)).filter(d=>d.due>=today());
+      await api('POST','/api/c/docs',{caseId:c.id,name,kind,filedBy:x.filedBy||'',docDate:given,text:text.slice(0,100000),truncated:text.length>100000,chars:text.length,pages:0,href:x.url||'',source:'נט המשפט (Claude)',uploadedAt:new Date().toISOString()});nDocs++;
+      /* deadlines: the ones Claude computed; otherwise read them only from rulings, never from the parties' own filings */
+      const dls=(x.deadlines&&x.deadlines.length?x.deadlines.map(d=>({due:String(d.due).slice(0,10),time:d.time||'',kind:KL[d.kind]?d.kind:kindOf(d.title||''),title:d.title||KL[d.kind]||'מועד',how:d.how||'לפי '+kind})):isRuling?decisionDeadlines(text,given):[]).filter(d=>d.due>=today());
       let added=0;for(const d of dls)if(await addTask(c,d,`${kind} מיום ${fmt(given)}`)){added++;nTasks++}
-      await logCase(c,`התקבלה ${kind} מיום ${fmt(given)} מנט המשפט${added?`, נוספו ${added} מועדים`:''}`);
+      await logCase(c,`התקבל מנט המשפט: ${name}${added?`, נוספו ${added} מועדים`:''}`);
       item(label,`נשמר בתיק ${c.client||''} ${c.number||''}${added?` · נוספו ${added} מועדים`:''}`,'i-ok');
     }catch(e){item(label,'נכשל: '+e.message,'i-err')}
   }
   if(left.length)await api('POST','/api/c/inbox',{title:'מ-Claude: פריטים שלא שויכו',text:JSON.stringify(left,null,1),files:[],status:'new',capturedAt:new Date().toISOString().slice(0,19)});
-  const s=$('#sum');s.hidden=false;s.textContent=`${nDocs} החלטות נשמרו בתיקים · ${nTasks} מועדים ודיונים נוספו (מסומנים "לאמת")${left.length?` · ${left.length} לא זוהו ונשארו לבדיקה`:''}`;
+  const s=$('#sum');s.hidden=false;s.textContent=`${nDocs} מסמכים תויקו בתיקים · ${nTasks} מועדים ודיונים נוספו (מסומנים "לאמת")${left.length?` · ${left.length} לא זוהו ונשארו לבדיקה`:''}`;
   say('הקליטה הסתיימה.','ok');
 }
 if(location.pathname==='/claude-import'){
