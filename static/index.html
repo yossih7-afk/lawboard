@@ -185,6 +185,42 @@ body.not-admin .adm-only{display:none!important}
 .asg{font:inherit;font-size:.85rem;font-weight:600;border:1px solid var(--line);background:var(--surface);color:var(--ink);border-radius:99px;padding:2px 10px;cursor:pointer}
 .asg.none{border-style:dashed;color:var(--accent)}
 .asg:hover{border-color:var(--accent)}
+.tgrid{display:grid;grid-template-columns:repeat(auto-fill,minmax(250px,1fr));gap:14px}
+.tcard{background:var(--surface);border:1px solid var(--line);border-radius:14px;display:flex;flex-direction:column;overflow:hidden;min-height:250px;box-shadow:0 1px 2px rgb(0 0 0 / .05);--sev:var(--line);--sevbg:var(--sunk)}
+.tcard.s-late{--sev:var(--late);--sevbg:var(--late-bg)} .tcard.s-today{--sev:var(--today);--sevbg:var(--today-bg)}
+.tcard.s-work,.tcard.s-soon{--sev:var(--accent);--sevbg:var(--soon-bg)} .tcard.s-done{opacity:.6;--sev:var(--ok);--sevbg:var(--ok-bg)}
+.tc-top{background:var(--sevbg);border-top:5px solid var(--sev);padding:10px 14px;display:flex;justify-content:space-between;align-items:baseline;gap:8px;flex-wrap:wrap}
+.tc-when{font-size:1.05rem;color:var(--sev)} .tcard.s-later .tc-when,.tcard.s-done .tc-when{color:var(--ink)}
+.tc-date{font-size:.85rem;color:var(--muted);font-variant-numeric:tabular-nums}
+.tc-body{padding:12px 14px;display:flex;flex-direction:column;gap:8px;flex:1;min-width:0}
+.tc-chips{display:flex;gap:6px;flex-wrap:wrap}
+.tc-title{margin:0;font-size:1.05rem;line-height:1.4;cursor:pointer;display:-webkit-box;-webkit-line-clamp:3;-webkit-box-orient:vertical;overflow:hidden}
+.tc-title:hover{text-decoration:underline}
+.tc-case{font:inherit;text-align:right;background:var(--sunk);border:0;border-radius:9px;padding:7px 10px;cursor:pointer;color:var(--ink);font-weight:700;display:flex;flex-direction:column;gap:1px}
+.tc-case small{font-weight:400;color:var(--muted);font-size:.8rem}
+.tc-case:hover{background:var(--soon-bg)}
+.tc-sub{font-size:.85rem;color:var(--today);font-weight:700}
+.tc-who{margin-top:auto}
+.tc-act{display:flex;gap:6px;padding:10px 14px;border-top:1px solid var(--line);background:var(--bg)}
+.tc-act .check{flex:1;padding:9px;font-size:.95rem;border-radius:9px}
+.tc-btn{font:inherit;font-weight:700;font-size:.9rem;border:1.5px solid var(--line);background:var(--surface);color:var(--ink);border-radius:9px;padding:8px 10px;cursor:pointer}
+.tc-btn:hover{border-color:var(--accent)}
+.addcard{font:inherit;font-weight:700;font-size:1rem;width:100%;border:2px dashed var(--line);background:transparent;color:var(--accent);border-radius:12px;padding:14px;cursor:pointer;margin-bottom:14px}
+.addcard:hover{border-color:var(--accent);background:var(--soon-bg)}
+.sheet.wide{width:min(1060px,100%)}
+.cs-head{display:flex;justify-content:space-between;align-items:flex-start;gap:12px}
+.cs-head h2{font-size:1.7rem}
+.bigacts{display:grid;grid-template-columns:repeat(auto-fit,minmax(120px,1fr));gap:10px}
+.bigacts button{font:inherit;font-weight:700;display:flex;flex-direction:column;align-items:center;gap:6px;padding:14px 8px;border-radius:12px;border:1.5px solid var(--line);background:var(--surface);color:var(--ink);cursor:pointer}
+.bigacts button span{font-size:1.4rem}
+.bigacts button:hover{border-color:var(--accent);background:var(--soon-bg)}
+.bigacts button.danger{color:var(--late)} .bigacts button.danger:hover{border-color:var(--late);background:var(--late-bg)}
+.tiles{display:grid;grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:10px}
+.tile{background:var(--surface);border:1px solid var(--line);border-radius:12px;padding:12px;display:flex;flex-direction:column;gap:4px;min-width:0}
+.tile>span{font-size:.8rem;color:var(--muted);font-weight:600}
+.tile b{font-size:1rem;overflow-wrap:anywhere} .tile small{display:block;font-weight:600;font-size:.82rem}
+.tile.t-late{border-color:var(--late);background:var(--late-bg)} .tile.t-warn{border-color:var(--today);background:var(--today-bg)}
+.tile.wide b{font-weight:600}
 .stg{display:flex;flex-wrap:wrap;gap:4px;margin-bottom:6px}
 .pill{font:inherit;font-size:.74rem;font-weight:700;border-radius:99px;padding:2px 8px;cursor:pointer;border:1.5px solid var(--line);background:var(--surface);color:var(--muted);display:inline-flex;gap:3px;align-items:center}
 .pill.done{background:var(--ok-bg);border-color:var(--ok);color:var(--ok)}
@@ -430,7 +466,7 @@ function renderToday(){
     <div class="stat" style="--c:var(--accent)"><div class="n">${work.length}</div><div class="l">לעבוד עליהם עכשיו</div></div>
     <div class="stat"><div class="n">${hearWeek}</div><div class="l">דיונים השבוע</div></div>
   </div>`;
-  const sec=(list,title,sub,mode)=>list.length?`<div class="group"><h2>${title}<small>${sub}</small></h2><ul class="tasks">${list.map(t=>taskRow(t,{mode})).join('')}</ul></div>`:'';
+  const sec=(list,title,sub,mode)=>list.length?`<div class="group"><h2>${title}<small>${sub}</small></h2>${cardGrid(list,{mode})}</div>`:'';
   const body=sec(late,'באיחור — לבדוק מיד','לסמן אם הוגש, או לבקש הארכה')+sec(tod,'היום','מועד אחרון או דיון היום')+sec(work,'על מה לעבוד עכשיו','חלון העבודה פתוח: המערכת מתכננת אחורה מהמועד','')+sec(up,'בקרוב','מתי להתחיל, לפי היקף העבודה','upcoming');
   if(!S.loaded.tasks)h+=`<div class="empty">טוען…</div>`;
   else if(!body)h+=`<div class="empty"><h3>אין מועדים פתוחים ב־30 הימים הקרובים</h3><p>הוסיפו תיק ומועד, או קלטו את קובץ האקסל ואת הודעות נט המשפט בלשונית "קליטה".</p><button class="btn" data-act="goImport" type="button">לקליטת תיקים</button></div>`;
@@ -595,7 +631,7 @@ function renderTasks(){
   $V().innerHTML=`<h3 class="sect">עומס לפי עובד <small class="muted">לחצו על עובד כדי לראות את המשימות שלו${S.admin?'. לחצו על 👤 ליד משימה כדי להעביר אותה':''}</small></h3>${workloadHTML()}<div class="toolbar"><select id="tStatus" aria-label="סטטוס"><option value="open">פתוחים</option><option value="done">בוצעו</option><option value="all">הכול</option></select>
   ${ownerSelect('כל המשרד')}
   ${S.canWrite?'<button class="btn ghost" data-act="newTask" type="button">+ מועד / משימה</button>':''}</div>
-  ${list.length?`<ul class="tasks">${list.map(t=>taskRow(t,{mode:'upcoming'})).join('')}</ul>`:`<div class="empty"><h3>אין מועדים ברשימה</h3></div>`}`;
+  ${list.length?cardGrid(list,{mode:'upcoming'}):`<div class="empty"><h3>אין מועדים ברשימה</h3></div>`}`;
   $('#tStatus').value=S.tStatus;
 }
 function calcDue(start,days,skipRecess){
@@ -787,8 +823,10 @@ async function caseDocs(caseId){try{const s=await S.db.collection('docs').where(
 async function styleDocs(){try{const s=await S.db.collection('style').get();return s.docs.map(d=>({id:d.id,...d.data()}))}catch(e){return[]}}
 
 /* ---------- sheets (overlays) ---------- */
+function backToCase(){if(!S.returnTo)return;const r=S.returnTo;S.returnTo=null;setTimeout(()=>{if(!document.querySelector('.overlay'))caseSheet(r)},350)}
 function sheet(html,bind){const o=document.createElement('div');o.className='overlay';o.innerHTML=`<div class="sheet" role="dialog" aria-modal="true">${html}</div>`;
-  o.addEventListener('click',e=>{if(e.target===o||e.target.closest('[data-close]'))o.remove()});
+  o.addEventListener('click',e=>{if(e.target===o||e.target.closest('[data-close]')){o.remove();if(!o.querySelector('.cs-head'))backToCase();else S.returnTo=null}});
+  new MutationObserver((m,ob)=>{if(!o.isConnected){ob.disconnect();if(!o.querySelector('.cs-head'))backToCase()}}).observe(document.body,{childList:true});
   document.addEventListener('keydown',function k(e){if(e.key==='Escape'){o.remove();document.removeEventListener('keydown',k)}});
   document.body.appendChild(o);bind&&bind(o);o.querySelector('input,select,button')?.focus();return o}
 function caseForm(c){
@@ -830,29 +868,84 @@ function taskForm(t,caseId){
     o.querySelector('#delT')?.addEventListener('click',async ev=>{const b=ev.target;if(b.dataset.sure){await S.db.doc('tasks/'+t.id).delete();o.remove();toast('המועד נמחק')}else{b.dataset.sure=1;b.textContent='לחצו שוב לאישור המחיקה'}})});
 }
 function docListHTML(docs){return docs.length?`<ul class="docs">${docs.map(d=>`<li><span class="chip">${esc(d.kind||'אחר')}</span><span class="nm">${esc(d.name)}</span><span class="muted">${(d.chars||0).toLocaleString('he-IL')} תווים${d.truncated?' (נשמר חלקית)':''}</span>${d.assetUrl?`<a class="btn ghost sm" href="${esc(d.assetUrl)}" target="_blank" rel="noopener">פתח</a>`:''}<button class="btn ghost sm" type="button" data-act="viewDoc" data-id="${esc(d.id)}">הצג טקסט</button>${S.canWrite?`<button class="btn danger sm adm-only" type="button" data-act="delDoc" data-id="${esc(d.id)}">מחק</button>`:''}</li>`).join('')}</ul>`:'<p class="muted">עדיין אין מסמכים בתיק. הוסיפו החלטות, כתבי טענות ופרוטוקולים, והטיוטות ייכתבו על בסיסם.</p>'}
-async function caseSheet(id){
-  const c=S.cases.get(id);if(!c)return;
-  const ts=[...S.tasks.values()].filter(t=>t.caseId===id).sort((a,b)=>(a.done-b.done)||a.due.localeCompare(b.due));
-  const o=sheet(`<div class="row" style="justify-content:space-between"><h2>${esc(caseLabel(c))}</h2><span class="chip">${esc(c.status||'פעיל')}</span></div>
-    <dl class="kv"><dt>תיק משרד</dt><dd>${esc(c.fileNo)}</dd><dt>הליך</dt><dd>${esc(c.procType)} ${esc(c.number)}</dd><dt>צדדים</dt><dd>${esc(c.title)}</dd><dt>אנו מייצגים</dt><dd>${esc(c.side)}</dd><dt>ערכאה</dt><dd>${esc(c.court)}</dd><dt>אחראי</dt><dd>${esc(c.owner)}</dd>${c.action?`<dt>פעולה לביצוע</dt><dd>${esc(c.action)}</dd>`:''}${isClosed(c)?`<dt>נסגר</dt><dd>${fmt(c.closedAt)} · ${esc(c.closeReason||'')}${c.judgmentDate?' · פס"ד '+fmt(c.judgmentDate):''}</dd>`:''}</dl>
-    <h3>סטטוס אחרון</h3>${(()=>{const ls=lastStatus(c);return ls?`<p style="margin:0"><b>${esc(ls.text)}</b>${ls.date?` <span class="muted">(${fmt(ls.date)}${ls.by?', '+esc(ls.by):''})</span>`:''}</p>`:'<p class="muted" style="margin:0">אין עדיין.</p>'})()}<details><summary class="muted" style="cursor:pointer">כל ההיסטוריה</summary>${logHTML(c)}</details>
-    <div class="actions">${S.canWrite?`<button class="btn" type="button" data-act="newTask" data-id="${esc(id)}">+ מועד לתיק</button><button class="btn ghost" type="button" data-act="status" data-id="${esc(id)}">עדכון סטטוס</button><button class="btn ghost" type="button" data-act="editCase" data-id="${esc(id)}">ערוך פרטים</button>${isClosed(c)?`<button class="btn ghost" type="button" data-act="reopen" data-id="${esc(id)}">פתח מחדש</button>`:`<button class="btn danger" type="button" data-act="closeCase" data-id="${esc(id)}">סגירת תיק</button>`}`:''}<button class="btn ghost" type="button" data-act="draftCase" data-id="${esc(id)}">✎ נסח מסמך</button><a class="btn ghost" href="https://secure.court.gov.il/Ngcs.Web.Secured/LawyerHomePage.aspx" target="_blank" rel="noopener">נט המשפט ↗</a><button class="btn ghost" type="button" data-close>סגור</button></div>
-    <h3>מועדים</h3>${ts.length?`<ul class="tasks">${ts.map(t=>taskRow(t,{showCase:false,mode:'upcoming'})).join('')}</ul>`:'<div class="empty">אין מועדים בתיק</div>'}
-    <h3>מסמכי התיק</h3><div id="docList"><p class="muted">טוען…</p></div>
-    ${S.canWrite?`<div class="drop" id="docDrop"><p>גררו לכאן קבצי PDF או Word, או <label class="btn ghost sm">בחרו קבצים<input type="file" multiple accept=".pdf,.docx,.txt" hidden></label></p>
-      <div class="row" style="justify-content:center"><label class="f" style="flex-direction:row;align-items:center;gap:6px"><span>סוג המסמך:</span><select id="docKind"><option value="">לפי שם הקובץ</option>${DOC_KINDS.map(k=>`<option>${k}</option>`).join('')}</select></label><label class="f" style="flex-direction:row;align-items:center;gap:6px"><span>תאריך המסמך:</span><input type="date" id="docDate" style="width:auto"></label></div>
+/* ---------- task cards: one square card per task, the main way tasks are shown ---------- */
+function taskCard(t,{showCase=true,mode=''}={}){
+  const c=caseOf(t),b=bucket(t),n=dd(today(),t.due),k=KINDS[t.kind]||KINDS.internal;
+  const w=!t.done?workState(t):null,p=plan(t);
+  const sev=t.done?'done':b==='late'?'late':b==='today'?'today':w?'work':b==='soon'?'soon':'later';
+  const head=t.done?'בוצע':n<0?`באיחור ${-n} ${-n===1?'יום':'ימים'}`:rel(n);
+  const sub=w?`${t.kind==='hearing'?'הכנה לדיון':'לעבוד על זה'} · יום ${w.dayN} מתוך ${w.e}`:(mode==='upcoming'&&p.e&&!t.done&&p.start>today()?`להתחיל ${fmt(p.start)}`:'');
+  const isNew=t.assignee&&t.assignee===S.me?.name&&t.seen===false&&!t.done;
+  return `<article class="tcard s-${sev}">
+    <div class="tc-top"><b class="tc-when">${head}</b><span class="tc-date">${t.kind==='hearing'?'דיון ':''}${fmt(t.due)}${t.time?' · '+esc(t.time):''}</span></div>
+    <div class="tc-body">
+      <div class="tc-chips"><span class="chip ${t.kind==='hearing'?'hear':k.crit?'crit':''}">${esc(k.l)}</span>${isNew?'<span class="chip new">חדש לך</span>':''}</div>
+      <h4 class="tc-title" data-act="editTask" data-id="${esc(t.id)}" title="${esc(t.title||k.l)}">${esc(t.title||k.l)}</h4>
+      ${showCase&&c?`<button type="button" class="tc-case" data-act="case" data-id="${esc(c.id)}">📁 ${esc(caseLabel(c))}<small>${esc([c.procType,c.number].filter(Boolean).join(' '))}</small></button>`:''}
+      ${sub?`<div class="tc-sub">${sub}</div>${w?progBar(w):''}`:''}
+      <div class="tc-who">${asgHTML(t)}</div>
+    </div>
+    <div class="tc-act">
+      <button class="check" type="button" data-act="toggle" data-id="${esc(t.id)}" aria-pressed="${!!t.done}" ${S.canWrite?'':'disabled'}>${t.done?'↩ החזר':'✓ סיימתי'}</button>
+      ${!t.done?`<button class="tc-btn" type="button" data-act="draft" data-id="${esc(t.id)}">✎ ${t.kind==='hearing'?'הכנה':'טיוטה'}</button>`:''}
+      <button class="tc-btn" type="button" data-act="editTask" data-id="${esc(t.id)}" aria-label="עריכה">✏️</button>
+    </div>
+  </article>`;
+}
+function cardGrid(list,opts){return `<div class="tgrid">${list.map(t=>taskCard(t,opts)).join('')}</div>`}
+
+/* ---------- case page: summary tiles, big actions, and tabs for tasks / history / documents ---------- */
+function caseTab(o,c,tab){
+  const id=c.id,body=o.querySelector('#csBody');o.querySelectorAll('[data-cst]').forEach(b=>b.setAttribute('aria-selected',b.dataset.cst===tab));
+  if(tab==='tasks'){
+    const ts=[...S.tasks.values()].filter(t=>t.caseId===id);const open=ts.filter(t=>!t.done).sort((a,b)=>a.due.localeCompare(b.due)),done=ts.filter(t=>t.done).sort((a,b)=>b.due.localeCompare(a.due));
+    body.innerHTML=`${S.canWrite?`<button class="addcard" type="button" data-act="newTask" data-id="${esc(id)}">+ משימה או מועד חדש</button>`:''}
+      ${open.length?cardGrid(open,{showCase:false,mode:'upcoming'}):'<div class="empty"><h3>אין משימות פתוחות בתיק</h3><p>לחצו "+ משימה או מועד חדש" כדי לקבוע את הצעד הבא.</p></div>'}
+      ${done.length?`<details style="margin-top:14px"><summary class="muted" style="cursor:pointer">משימות שבוצעו (${done.length})</summary>${cardGrid(done,{showCase:false})}</details>`:''}`;
+  }else if(tab==='log'){
+    body.innerHTML=`${S.canWrite?`<button class="addcard" type="button" data-act="status" data-id="${esc(id)}">+ עדכון סטטוס</button>`:''}${logHTML(c)}`;
+  }else{
+    body.innerHTML=`<div id="docList"><p class="muted">טוען…</p></div>
+    ${S.canWrite?`<div class="drop" id="docDrop" style="margin-top:12px"><p>גררו לכאן קבצי PDF או Word, או <label class="btn ghost sm">בחרו קבצים<input type="file" multiple accept=".pdf,.docx,.txt" hidden></label></p>
+      <div class="row" style="justify-content:center"><label class="f" style="flex-direction:row;align-items:center;gap:6px"><span>סוג המסמך:</span><select id="docKind" style="width:auto"><option value="">לפי שם הקובץ</option>${DOC_KINDS.map(k=>`<option>${k}</option>`).join('')}</select></label><label class="f" style="flex-direction:row;align-items:center;gap:6px"><span>תאריך:</span><input type="date" id="docDate" style="width:auto"></label></div>
       <p class="note" id="docStat" aria-live="polite">הטקסט נקרא מתוך הקובץ ונשמר בתיק. מסמך סרוק (תמונה) לא ייקרא.</p></div>
-      <details><summary class="muted" style="cursor:pointer">או הדביקו טקסט של מסמך</summary><div class="grid2" style="margin-top:8px"><label class="f"><span>שם המסמך</span><input type="text" id="pName" placeholder="החלטה מיום 20.10.26"></label><label class="f"><span>סוג</span><select id="pKind">${DOC_KINDS.map(k=>`<option>${k}</option>`).join('')}</select></label><label class="f" style="grid-column:1/-1"><span>הטקסט</span><textarea id="pText"></textarea></label></div><button class="btn sm" id="pSave" type="button">שמור מסמך</button></details>`:''}`,
-  o=>{
+      <details><summary class="muted" style="cursor:pointer">או הדביקו טקסט של מסמך</summary><div class="grid2" style="margin-top:8px"><label class="f"><span>שם המסמך</span><input type="text" id="pName" placeholder="החלטה מיום 20.10.26"></label><label class="f"><span>סוג</span><select id="pKind">${DOC_KINDS.map(k=>`<option>${k}</option>`).join('')}</select></label><label class="f" style="grid-column:1/-1"><span>הטקסט</span><textarea id="pText"></textarea></label></div><button class="btn sm" id="pSave" type="button">שמור מסמך</button></details>`:''}`;
     const st=o.querySelector('#docStat');
+    const refresh=async()=>{const docs=await caseDocs(id);o._docs=docs;const el=o.querySelector('#docList');if(el)el.innerHTML=docListHTML(docs);const n=o.querySelector('#docN');if(n)n.textContent=docs.length};o._refresh=refresh;
     dropZone(o,'#docDrop',async files=>{let ok=0;for(const f of files){st.textContent=`קורא את ${f.name}…`;
       try{const data=await ingest(f,{caseId:id,kind:o.querySelector('#docKind').value||guessDocKind(f.name),docDate:o.querySelector('#docDate').value||''});await S.db.collection('docs').doc().set(data);ok++}catch(e){toast(f.name+': '+e.message)}}
-      st.textContent=ok?`נשמרו ${ok} מסמכים.`:'לא נשמרו מסמכים.';refreshDocs()});
+      st.textContent=ok?`נשמרו ${ok} מסמכים.`:'לא נשמרו מסמכים.';refresh()});
     o.querySelector('#pSave')?.addEventListener('click',async()=>{const tx=o.querySelector('#pText').value.trim();if(tx.length<20){toast('הדביקו את טקסט המסמך');return}
-      try{await S.db.collection('docs').doc().set({caseId:id,name:o.querySelector('#pName').value.trim()||'מסמך מודבק',kind:o.querySelector('#pKind').value,text:tx.slice(0,MAXCH),truncated:tx.length>MAXCH,chars:tx.length,pages:0,uploadedAt:new Date().toISOString()});o.querySelector('#pText').value='';toast('המסמך נשמר');refreshDocs()}catch(e){writeErr(e)}});
-    async function refreshDocs(){const docs=await caseDocs(id);o._docs=docs;const el=o.querySelector('#docList');if(el)el.innerHTML=docListHTML(docs)}
-    o._refresh=refreshDocs;refreshDocs();
-  });
+      try{await S.db.collection('docs').doc().set({caseId:id,name:o.querySelector('#pName').value.trim()||'מסמך מודבק',kind:o.querySelector('#pKind').value,text:tx.slice(0,MAXCH),truncated:tx.length>MAXCH,chars:tx.length,pages:0,uploadedAt:new Date().toISOString()});o.querySelector('#pText').value='';toast('המסמך נשמר');refresh()}catch(e){writeErr(e)}});
+    refresh();
+  }
+}
+async function caseSheet(id,tab){
+  const c=S.cases.get(id);if(!c)return;
+  const open=openTasks().filter(t=>t.caseId===id),nx=nextFor(id),ls=lastStatus(c),late=open.filter(t=>t.due<today()).length;
+  const tile=(l,v,extra='')=>`<div class="tile ${extra}"><span>${l}</span><b>${v||'<span class="muted">—</span>'}</b></div>`;
+  const o=sheet(`<div class="cs-head"><div><h2>${esc(caseLabel(c))}</h2><p class="muted" style="margin:2px 0 0">${esc([c.procType,c.number].filter(Boolean).join(' '))}${c.title?' · '+esc(c.title):''}</p></div><span class="chip ${isClosed(c)?'':'ok'}">${esc(c.status||'פעיל')}</span></div>
+    ${S.canWrite?`<div class="bigacts">
+      <button type="button" data-act="status" data-id="${esc(id)}"><span>📝</span>עדכון סטטוס</button>
+      <button type="button" data-act="newTask" data-id="${esc(id)}"><span>📅</span>משימה / מועד</button>
+      <button type="button" data-act="draftCase" data-id="${esc(id)}"><span>✎</span>נסח מסמך</button>
+      <button type="button" data-act="editCase" data-id="${esc(id)}"><span>⚙️</span>פרטי התיק</button>
+      ${isClosed(c)?`<button type="button" data-act="reopen" data-id="${esc(id)}"><span>↩</span>פתח מחדש</button>`:`<button type="button" class="danger" data-act="closeCase" data-id="${esc(id)}"><span>🔒</span>סגירת תיק</button>`}
+    </div>`:''}
+    <div class="tiles">
+      ${tile('המועד הבא',nx?`${esc(KINDS[nx.kind]?.l||'')} · ${fmt(nx.due)}<small class="${nx.due<today()?'tl':''}">${rel(dd(today(),nx.due))}</small>`:'<span class="tl">אין מועד — לקבוע</span>',nx&&nx.due<today()?'t-late':!nx?'t-warn':'')}
+      ${tile('משימות פתוחות',`${open.length}${late?` <small class="tl">${late} באיחור</small>`:''}`)}
+      ${tile('אחראי',esc(c.owner))}
+      ${tile('אנו מייצגים',esc(c.side))}
+      ${tile('תיק משרד',esc(c.fileNo))}
+      ${tile('ערכאה / שופט',esc([c.court,c.judge].filter(Boolean).join(' · ')))}
+    </div>
+    <div class="tile wide"><span>סטטוס אחרון${ls?.date?` · ${fmt(ls.date)}${ls.by?' · '+esc(ls.by):''}`:''}</span><b>${ls?esc(ls.text):'<span class="muted">אין עדיין</span>'}</b>${c.action?`<span style="margin-top:6px">פעולה לביצוע</span><b>${esc(c.action)}</b>`:''}${isClosed(c)?`<span style="margin-top:6px">נסגר</span><b>${fmt(c.closedAt)} · ${esc(c.closeReason||'')}${c.judgmentDate?' · פס"ד '+fmt(c.judgmentDate):''}</b>`:''}</div>
+    <div class="seg" role="tablist" style="margin:6px 0 0"><button type="button" data-cst="tasks">משימות (${open.length})</button><button type="button" data-cst="log">יומן התיק</button><button type="button" data-cst="docs">מסמכים (<span id="docN">…</span>)</button></div>
+    <div id="csBody"></div>
+    <div class="actions"><a class="btn ghost" href="https://secure.court.gov.il/Ngcs.Web.Secured/LawyerHomePage.aspx" target="_blank" rel="noopener">נט המשפט ↗</a><button class="btn ghost" type="button" data-close>סגור</button></div>`,
+  o=>{o._caseId=id;o.querySelector('.sheet').classList.add('wide');o.querySelectorAll('[data-cst]').forEach(b=>b.addEventListener('click',()=>caseTab(o,c,b.dataset.cst)));
+    caseTab(o,c,tab||'tasks');caseDocs(id).then(d=>{const n=o.querySelector('#docN');if(n)n.textContent=d.length})});
 }
 
 /* ---------- drafting ---------- */
@@ -1217,7 +1310,7 @@ function dealSheet(id){
     <h3>שלבי העסקה <small class="muted">${p.done} מתוך ${p.total}</small></h3>
     <ul class="docs">${STAGES.map(([k,l])=>{const st=stageOf(d,k);return `<li><span class="nm"><b>${esc(l)}</b> ${st.s==='done'?`<span class="chip ok">בוצע${st.d?' '+fmt(st.d):''}</span>`:st.s==='na'?'<span class="chip">לא רלוונטי</span>':'<span class="chip prep">טרם</span>'}</span>${S.canWrite?`<input type="date" class="stDate" data-k="${k}" value="${esc(st.s==='done'?st.d||'':'')}" aria-label="תאריך ${esc(l)}" style="width:auto"><button class="btn sm" type="button" data-act="stageSet" data-id="${esc(id)}" data-k="${k}" data-to="done">${st.s==='done'?'עדכן':'בוצע'}</button><button class="btn ghost sm" type="button" data-act="stageSet" data-id="${esc(id)}" data-k="${k}" data-to="${st.s==='na'?'':'na'}">${st.s==='na'?'החזר':'לא רלוונטי'}</button>`:''}</li>`}).join('')}</ul>
     <div class="actions">${S.canWrite?`<button class="btn" type="button" data-act="dealStatus" data-id="${esc(id)}">עדכון סטטוס</button><button class="btn ghost" type="button" data-act="newDealTask" data-id="${esc(id)}">+ משימה / מועד</button><button class="btn ghost" type="button" data-act="editDeal" data-id="${esc(id)}">ערוך פרטים</button>${d.status==='הושלם'?`<button class="btn ghost" type="button" data-act="dealReopen" data-id="${esc(id)}">פתח מחדש</button>`:`<button class="btn danger" type="button" data-act="dealDone" data-id="${esc(id)}">סמן כהושלמה</button>`}`:''}<button class="btn ghost" type="button" data-close>סגור</button></div>
-    <h3>משימות</h3>${ts.length?`<ul class="tasks">${ts.map(t=>taskRow(t,{showCase:false,mode:'upcoming'})).join('')}</ul>`:'<p class="muted">אין משימות בעסקה.</p>'}
+    <h3>משימות</h3>${ts.length?cardGrid(ts,{showCase:false,mode:'upcoming'}):'<p class="muted">אין משימות בעסקה.</p>'}
     <h3>יומן העסקה</h3>${(d.log||[]).length?`<ul class="docs">${[...d.log].reverse().map(l=>`<li><span class="num muted" style="min-width:80px">${fmt(l.date)}</span><span class="nm">${esc(l.text)}</span><span class="muted sm">${esc(l.by||'')}</span></li>`).join('')}</ul>`:'<p class="muted">עדיין אין עדכונים.</p>'}
     <h3>מסמכים</h3><div id="docList"><p class="muted">טוען…</p></div>
     ${S.canWrite?`<div class="drop" id="docDrop"><p>גררו לכאן טיוטות, הסכם חתום, שטר מכר, אישורים (PDF או Word), או <label class="btn ghost sm">בחרו קבצים<input type="file" multiple accept=".pdf,.docx,.txt" hidden></label></p><p class="note" id="docStat"></p></div>`:''}`,
@@ -1337,6 +1430,7 @@ document.addEventListener('click',async e=>{
   const ed=e.target.closest('td[data-edit]');if(ed){startEdit(ed);return}
   const de=e.target.closest('td[data-dedit]');if(de){startDealEdit(de);return}
   const a=e.target.closest('[data-act]');if(!a)return;const id=a.dataset.id;
+  const inCase=a.closest('.overlay')?.querySelector('.cs-head');if(inCase&&['status','newTask','editCase','editTask','draft','draftCase','closeCase','assign'].includes(a.dataset.act))S.returnTo=a.closest('.overlay')._caseId;
   const closeAll=()=>document.querySelectorAll('.overlay').forEach(o=>o.remove());
   switch(a.dataset.act){
     case'toggle':{const t=S.tasks.get(id);if(t&&S.canWrite){await saveTask(id,{done:!t.done,doneAt:t.done?'':new Date().toISOString()});if(!t.done&&t.caseId)await addLog(t.caseId,'בוצע: '+(t.title||KINDS[t.kind]?.l||''),today());toast(t.done?'הוחזר לרשימה':'כל הכבוד — סומן כבוצע')}break}
