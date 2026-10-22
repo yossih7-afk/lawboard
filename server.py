@@ -223,6 +223,23 @@ def set_admin(name, pin):
     save_admins(a)
 
 
+def get_pins():
+    try:
+        return json.loads(get_conf("pins") or "{}")
+    except ValueError:
+        return {}
+
+
+def set_pin(name, pin):
+    pins = get_pins()
+    if pin:
+        salt = secrets.token_hex(16)
+        pins[name] = {"salt": salt, "hash": hash_pin(pin, salt)}
+    else:
+        pins.pop(name, None)
+    set_conf("pins", json.dumps(pins, ensure_ascii=False))
+
+
 def set_code(code):
     """An empty code means the system opens without a code."""
     if not code:
@@ -271,7 +288,7 @@ class Handler(BaseHTTPRequestHandler):
         self.send_header("Content-Type", "application/json; charset=utf-8")
         self.send_header("Content-Length", str(len(body)))
         self.send_header("Cache-Control", "no-store")
-        for k, v in (headers or {}).items():
+        for k, v in (headers.items() if isinstance(headers, dict) else headers or []):
             self.send_header(k, v)
         self.end_headers()
         self.wfile.write(body)
@@ -319,8 +336,19 @@ class Handler(BaseHTTPRequestHandler):
         name = row["name"][6:]
         return name if name in get_admins() else None
 
+    def session_user(self):
+        jar = cookies.SimpleCookie(self.headers.get("Cookie") or "")
+        tok = jar.get("usr")
+        if not tok:
+            return None
+        with db() as c:
+            row = c.execute("SELECT name, created FROM sessions WHERE token=?", (tok.value,)).fetchone()
+        if not row or time.time() - row["created"] > SESSION_DAYS * 86400 or not row["name"].startswith("user:"):
+            return None
+        return row["name"][5:]
+
     def who(self):
-        return unquote(self.headers.get("X-User") or "")[:80]
+        return self.session_user() or self.admin() or ""
 
     def serve_file(self, path, ctype=None, download_name=None):
         if not path.exists() or not path.is_file():
@@ -410,6 +438,22 @@ class Handler(BaseHTTPRequestHandler):
                     return self.fail(500, "לא הצלחתי לכתוב את הגדרות אפליקציית Claude במחשב הזה.")
             if p == "/api/version" and method == "GET":
                 return self.send_json({"version": local_version()})
+            if p == "/api/user" and method == "GET":
+                pins = get_pins()
+                return self.send_json({"user": self.session_user(), "withCode": sorted(set(pins) | set(get_admins()))})
+            if p == "/api/user/login" and method == "POST":
+                return self.api_user_login()
+            if p == "/api/user/logout" and method == "POST":
+                return self.send_json({"ok": True}, headers={"Set-Cookie": "usr=; Path=/; Max-Age=0"})
+            if p == "/api/user/pin" and method == "POST":
+                if not self.admin():
+                    return self.fail(403, "רק מנהל קובע קודים לעובדים")
+                b = self.body_json()
+                pin = str(b.get("pin", "")).strip()
+                if pin and len(pin) < 4:
+                    return self.fail(400, "קוד של 4 ספרות לפחות")
+                set_pin(str(b.get("name", "")), pin)
+                return self.send_json({"ok": True})
             if p == "/api/admin" and method == "GET":
                 return self.send_json({"admin": self.admin(), "admins": sorted(get_admins())})
             if p == "/api/admin/login" and method == "POST":
@@ -481,6 +525,20 @@ class Handler(BaseHTTPRequestHandler):
             return self.fail(403, "הקוד לא נכון. נסו שוב, או בקשו את הקוד ממי שהתקין את המערכת.")
         self.send_json({"ok": True}, headers=self.session_cookie())
 
+    def api_user_login(self):
+        """An employee picks their name; employees with a personal code must type it."""
+        b = self.body_json()
+        name, pin = str(b.get("name", "")).strip(), str(b.get("pin", "")).strip()
+        rec = get_pins().get(name) or get_admins().get(name)
+        if rec:
+            time.sleep(0.4)
+            if not hmac.compare_digest(rec["hash"], hash_pin(pin, rec["salt"])):
+                return self.fail(403, "הקוד האישי לא נכון.")
+        tok = secrets.token_hex(32)
+        with db() as c:
+            c.execute("INSERT INTO sessions VALUES(?,?,?)", (tok, "user:" + name, time.time()))
+        self.send_json({"ok": True}, headers={"Set-Cookie": f"usr={tok}; HttpOnly; SameSite=Lax; Path=/; Max-Age={SESSION_DAYS * 86400}"})
+
     def api_admin_login(self):
         b = self.body_json()
         name, pin = str(b.get("name", "")), str(b.get("pin", "")).strip()
@@ -491,7 +549,9 @@ class Handler(BaseHTTPRequestHandler):
         tok = secrets.token_hex(32)
         with db() as c:
             c.execute("INSERT INTO sessions VALUES(?,?,?)", (tok, "admin:" + name, time.time()))
-        self.send_json({"ok": True}, headers={"Set-Cookie": f"adm={tok}; HttpOnly; SameSite=Lax; Path=/; Max-Age={SESSION_DAYS * 86400}"})
+            c.execute("INSERT INTO sessions VALUES(?,?,?)", (tok + "u", "user:" + name, time.time()))
+        age = f"HttpOnly; SameSite=Lax; Path=/; Max-Age={SESSION_DAYS * 86400}"
+        self.send_json({"ok": True}, headers=[("Set-Cookie", f"adm={tok}; {age}"), ("Set-Cookie", f"usr={tok}u; {age}")])
 
     def api_admin_set(self):
         """Add an administrator or change one's code. The first one can be set by anyone."""
@@ -552,7 +612,26 @@ class Handler(BaseHTTPRequestHandler):
     # ---------- generic document store ----------
     def api_collection(self, method, col, did, q, u):
         did = unquote(did) if did else None
-        if method in ("PUT", "PATCH", "DELETE", "POST") and not self.admin():
+        admin = self.admin()
+        me = self.who()
+        # employees see and change only their own tasks; the admin sees everything and routes
+        if col == "tasks" and not admin:
+            if not me:
+                if method == "GET" and not did:
+                    return self.send_json([])
+                return self.fail(403, "בחרו את שמכם כדי לעבוד עם משימות")
+            r = None
+            if did:
+                with db() as c:
+                    r = c.execute("SELECT data FROM kv WHERE col='tasks' AND id=?", (did,)).fetchone()
+                if r and json.loads(r["data"]).get("assignee", "") != me:
+                    return self.fail(403, "המשימה הזו שייכת לעובד אחר")
+            if method in ("POST", "PUT") and not r:
+                body = self.body_json_cached()
+                if body.get("assignee", me) != me:
+                    return self.fail(403, "רק מנהל יכול לפתוח משימה לעובד אחר")
+                body["assignee"] = me
+        if method in ("PUT", "PATCH", "DELETE", "POST") and not admin:
             if col == "settings" and did != "people":
                 return self.fail(403, "רק מנהל יכול לשנות הגדרות")
             if method == "DELETE" and col in ("cases", "deals", "docs", "style"):
@@ -579,6 +658,8 @@ class Handler(BaseHTTPRequestHandler):
                 for r in rows:
                     d = json.loads(r["data"])
                     if f and str(d.get(f, "")) != v:
+                        continue
+                    if col == "tasks" and not admin and d.get("assignee", "") != me:
                         continue
                     if q.get("lite") and col in ("docs", "style", "inbox"):
                         d.pop("text", None)
@@ -622,7 +703,8 @@ def reset_pin():
     """Removes the office code and the administrators (run on the office computer)."""
     set_code("")
     save_admins({})
-    print(f"\n  Done. The office code and the administrator codes were removed. Data folder: {DATA}")
+    set_conf("pins", "{}")
+    print(f"\n  Done. The office code, administrator codes and employee codes were removed. Data folder: {DATA}")
     print("  Open the system, go to Settings, and set the administrator again.\n")
 
 

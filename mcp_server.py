@@ -484,7 +484,7 @@ def t_list_people(a):
     return {"people": p.get("list") or (get("settings", "main") or {}).get("people", [])}
 
 
-S_CASE = {"type": "string", "description": "שם הלקוח, מספר הליך (למשל 14921-10-24) או מספר תיק משרד"}
+S_CASE = {"type": "string", "description": "שם הלקוח, מספר הליך (למשל 12345-01-26) או מספר תיק משרד"}
 S_DEAL = {"type": "string", "description": "שם העסקה, גוש/חלקה או מספר תיק משרד"}
 S_DATE = {"type": "string", "description": "YYYY-MM-DD"}
 TOOLS = [

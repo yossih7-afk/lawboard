@@ -179,6 +179,11 @@ textarea.draft{min-height:420px;line-height:1.75;font-size:15.5px;white-space:pr
 body{font-size:1.0625rem;padding:0}
 :root{--muted:#4A5560}
 body.not-admin .adm-only{display:none!important}
+.mrows{display:flex;flex-direction:column;gap:8px;margin-bottom:10px}
+.mrow{display:grid;grid-template-columns:150px 1fr 150px 140px auto;gap:8px;align-items:center;padding:8px;border:1px solid var(--line);border-radius:12px;background:var(--surface)}
+.row>.addcard{flex:1 1 220px;width:auto}
+.mrow:not(:has(select[name=assignee])){grid-template-columns:150px 1fr 150px auto}
+@media (max-width:700px){.mrow,.mrow:not(:has(select[name=assignee])){grid-template-columns:1fr 1fr}.mrow input[name=title]{grid-column:1/-1;order:-1}}
 .brand .logo.has-img{width:auto;height:52px;max-width:130px;background:#fff;padding:4px;border-radius:10px}
 .brand .logo.has-img img{height:100%;width:auto;max-width:122px;object-fit:contain;display:block}
 .brand:has(.logo.has-img){flex-direction:column;align-items:flex-start;gap:8px}
@@ -384,7 +389,7 @@ function score(t){const n=dd(today(),t.due);return n-(KINDS[t.kind]?.crit?1.5:0)
 const byPri=(a,b)=>score(a)-score(b);
 function people(){const s=new Set();for(const c of S.cases.values())c.owner&&s.add(c.owner);for(const t of S.tasks.values())t.assignee&&s.add(t.assignee);return[...s].sort((a,b)=>a.localeCompare(b,'he'))}
 function nextFor(caseId){return openTasks().filter(t=>t.caseId===caseId).sort((a,b)=>a.due.localeCompare(b.due)||(a.time||'').localeCompare(b.time||''))[0]}
-function mine(t){if(!S.owner)return true;if(S.owner==='__none')return !t.assignee;return t.assignee===S.owner||(!t.assignee&&caseOf(t)?.owner===S.owner)}
+function mine(t){if(!S.owner||!S.admin)return true;if(S.owner==='__none')return !t.assignee;return t.assignee===S.owner||(!t.assignee&&caseOf(t)?.owner===S.owner)}
 function asgHTML(t){
   if(t.done)return t.assignee?`<span>${esc(t.assignee)}</span>`:'';
   if(S.admin)return `<button type="button" class="asg ${t.assignee?'':'none'}" data-act="assign" data-id="${esc(t.id)}" title="שיוך לעובד">👤 ${esc(t.assignee||'לשייך לעובד')}</button>`;
@@ -459,7 +464,7 @@ function renderToday(){
   const unas=openTasks().filter(t=>!t.assignee).length;
   if(S.admin&&unas)h+=`<div class="banner" style="margin:0 0 16px"><span>${unas} משימות פתוחות עוד לא שויכו לאף עובד.</span><button class="btn sm" type="button" data-act="goUnassigned">לשייך עכשיו</button></div>`;
   h+=`<p class="hello">${greet()}${S.me?.name?', '+esc(S.me.name):''}.</p><p class="hello-sub">${S.loaded.tasks?(parts.length?'על השולחן שלך: '+parts.join(', ')+'.':'אין משהו דחוף היום.'):'טוען את מועדי המשרד…'} כשמשימה בוצעה לחצו "✓ סיימתי". לחיצה על שם המשימה פותחת אותה לעריכה.</p>
-  <div class="toolbar"><span class="muted">מציג משימות של</span>${ownerSelect('כל המשרד')}</div>
+  ${S.admin?`<div class="toolbar"><span class="muted">מציג משימות של</span>${ownerSelect('כל המשרד')}</div>`:''}
   <div class="summary">
     <div class="stat" style="--c:var(--late)"><div class="n">${late.length}</div><div class="l">באיחור</div></div>
     <div class="stat" style="--c:var(--today)"><div class="n">${tod.length}</div><div class="l">להגיש / להופיע היום</div></div>
@@ -477,7 +482,7 @@ function renderCal(){
   const T=today(),all=openTasks().filter(mine),days=[];
   for(let i=0;i<21;i++)days.push(addDays(T,i));
   const late=all.filter(t=>t.due<T).length;
-  let h=`<div class="toolbar">${ownerSelect('כל המשרד')}<span class="muted">שלושה שבועות קדימה: דיונים, מועדי הגשה וימי העבודה שתוכננו לכל מסמך.</span></div>`;
+  let h=`<div class="toolbar">${S.admin?ownerSelect('כל המשרד'):''}<span class="muted">שלושה שבועות קדימה: דיונים, מועדי הגשה וימי העבודה שתוכננו לכל מסמך.</span></div>`;
   if(late)h+=`<div class="banner" style="margin:0 0 12px"><span>יש ${late} מועדים שחלפו ולא סומנו. הם מופיעים בלשונית "הבוקר שלי".</span></div>`;
   h+='<div class="cal">'+days.map(d=>{
     const g=pISO(d),ev=[];
@@ -628,8 +633,8 @@ function renderTasks(){
   if(S.tStatus==='open')list=list.filter(t=>!t.done);else if(S.tStatus==='done')list=list.filter(t=>t.done);
   list=list.filter(mine);
   list.sort((a,b)=>a.due.localeCompare(b.due)||(a.time||'').localeCompare(b.time||''));
-  $V().innerHTML=`<h3 class="sect">עומס לפי עובד <small class="muted">לחצו על עובד כדי לראות את המשימות שלו${S.admin?'. לחצו על 👤 ליד משימה כדי להעביר אותה':''}</small></h3>${workloadHTML()}<div class="toolbar"><select id="tStatus" aria-label="סטטוס"><option value="open">פתוחים</option><option value="done">בוצעו</option><option value="all">הכול</option></select>
-  ${ownerSelect('כל המשרד')}
+  $V().innerHTML=`${S.admin?`<h3 class="sect">עומס לפי עובד <small class="muted">לחצו על עובד כדי לראות את המשימות שלו. לחצו על 👤 ליד משימה כדי להעביר אותה</small></h3>${workloadHTML()}`:'<p class="hello-sub">כאן מופיעות רק המשימות שלך. משימות של עובדים אחרים לא מוצגות לך.</p>'}<div class="toolbar"><select id="tStatus" aria-label="סטטוס"><option value="open">פתוחים</option><option value="done">בוצעו</option><option value="all">הכול</option></select>
+  ${S.admin?ownerSelect('כל המשרד'):''}
   ${S.canWrite?'<button class="btn ghost" data-act="newTask" type="button">+ מועד / משימה</button>':''}</div>
   ${list.length?cardGrid(list,{mode:'upcoming'}):`<div class="empty"><h3>אין מועדים ברשימה</h3></div>`}`;
   $('#tStatus').value=S.tStatus;
@@ -849,7 +854,7 @@ function caseForm(c){
   o=>o.querySelector('#cf').addEventListener('submit',async e=>{e.preventDefault();const d=Object.fromEntries(new FormData(e.target));await saveCase(c.id,d);if(S.admin&&c.id&&d.owner&&d.owner!==c.owner){for(const t of openTasks().filter(x=>x.caseId===c.id&&(!x.assignee||x.assignee===c.owner)))await saveTask(t.id,{assignee:d.owner,assignedBy:S.me?.name||'',assignedAt:new Date().toISOString(),seen:d.owner===S.me?.name})}o.remove();toast('התיק נשמר')}));
 }
 function taskForm(t,caseId){
-  t=t||{caseId,kind:'submission',due:today(),assignee:S.cases.get(caseId)?.owner||''};
+  t=t||{caseId,kind:'submission',due:today(),assignee:S.admin?S.cases.get(caseId)?.owner||'':S.me?.name||''};
   const p=t.due?plan(t):null;
   sheet(`<h2>${t.id?'עריכת מועד':'מועד / משימה חדשה'}</h2><form id="tf" class="grid2">
     <label class="f" style="grid-column:1/-1"><span>תיק</span><select name="caseId" required><option value="">בחרו תיק…</option>${caseOptions(t.caseId)}</select></label>
@@ -866,6 +871,29 @@ function taskForm(t,caseId){
     <div class="actions" style="grid-column:1/-1"><button class="btn" type="submit">שמור</button><button class="btn ghost" type="button" data-close>ביטול</button>${t.id?'<button class="btn danger" type="button" id="delT">מחק מועד</button>':''}</div></form>`,
   o=>{o.querySelector('#tf').addEventListener('submit',async e=>{e.preventDefault();const d=Object.fromEntries(new FormData(e.target));if(d.effort==='')d.effort=null;else d.effort=+d.effort;await saveTask(t.id,{...d,source:t.source||'ידני',done:!!t.done,verify:false});o.remove();toast('המועד נשמר')});
     o.querySelector('#delT')?.addEventListener('click',async ev=>{const b=ev.target;if(b.dataset.sure){await S.db.doc('tasks/'+t.id).delete();o.remove();toast('המועד נמחק')}else{b.dataset.sure=1;b.textContent='לחצו שוב לאישור המחיקה'}})});
+}
+/* several tasks for one case in one go: one row per task */
+function multiTaskForm(caseId){
+  const c=S.cases.get(caseId);if(!c)return;
+  const row=()=>`<div class="mrow"><select name="kind" aria-label="סוג">${Object.entries(KINDS).map(([k,v])=>`<option value="${k}" ${k==='internal'?'selected':''}>${v.l}</option>`).join('')}</select>
+    <input type="text" name="title" placeholder="מה צריך לעשות" aria-label="תיאור">
+    <input type="date" name="due" value="${addDays(today(),7)}" aria-label="מועד">
+    ${S.admin?`<select name="assignee" aria-label="אחראי"><option value="">לא שויך</option>${(S.people||[]).map(p=>`<option ${p===c.owner?'selected':''}>${esc(p)}</option>`).join('')}</select>`:''}
+    <button class="btn ghost sm" type="button" data-rm aria-label="הסר שורה">✕</button></div>`;
+  sheet(`<h2>כמה משימות לתיק</h2><p class="muted">${esc(caseLabel(c))}. כל שורה היא משימה נפרדת. מלאו מה צריך לעשות ועד מתי${S.admin?', ולמי זה הולך':''}.</p>
+    <form id="mtf"><div id="mRows" class="mrows">${row()}${row()}${row()}</div>
+    <button class="addcard" type="button" id="mAdd">+ עוד שורה</button>
+    <p class="note" id="mErr" style="color:var(--late)"></p>
+    <div class="actions"><button class="btn" type="submit">שמור את כל המשימות</button><button class="btn ghost" type="button" data-close>ביטול</button></div></form>`,
+  o=>{const rows=o.querySelector('#mRows');o.querySelector('.sheet').classList.add('wide');
+    o.querySelector('#mAdd').addEventListener('click',()=>{rows.insertAdjacentHTML('beforeend',row());rows.lastElementChild.querySelector('[name=title]').focus()});
+    rows.addEventListener('click',e=>{if(e.target.closest('[data-rm]')&&rows.children.length>1)e.target.closest('.mrow').remove()});
+    o.querySelector('#mtf').addEventListener('submit',async e=>{e.preventDefault();
+      const list=[...rows.children].map(r=>Object.fromEntries([...r.querySelectorAll('[name]')].map(i=>[i.name,i.value.trim()]))).filter(d=>d.title);
+      if(!list.length){o.querySelector('#mErr').textContent='כתבו לפחות משימה אחת.';return}
+      if(list.some(d=>!d.due)){o.querySelector('#mErr').textContent='לכל משימה צריך תאריך.';return}
+      for(const d of list)await saveTask(null,{...d,caseId,assignee:S.admin?d.assignee||'':S.me?.name||'',effort:null,source:'ידני',verify:false,seen:S.admin&&d.assignee&&d.assignee!==S.me?.name?false:undefined});
+      await S.db.refresh('tasks').catch(()=>{});o.remove();toast(`נשמרו ${list.length} משימות בתיק`);caseSheet(caseId,'tasks')})});
 }
 function docListHTML(docs){return docs.length?`<ul class="docs">${docs.map(d=>`<li><span class="chip">${esc(d.kind||'אחר')}</span><span class="nm">${esc(d.name)}</span><span class="muted">${(d.chars||0).toLocaleString('he-IL')} תווים${d.truncated?' (נשמר חלקית)':''}</span>${d.assetUrl?`<a class="btn ghost sm" href="${esc(d.assetUrl)}" target="_blank" rel="noopener">פתח</a>`:''}<button class="btn ghost sm" type="button" data-act="viewDoc" data-id="${esc(d.id)}">הצג טקסט</button>${S.canWrite?`<button class="btn danger sm adm-only" type="button" data-act="delDoc" data-id="${esc(d.id)}">מחק</button>`:''}</li>`).join('')}</ul>`:'<p class="muted">עדיין אין מסמכים בתיק. הוסיפו החלטות, כתבי טענות ופרוטוקולים, והטיוטות ייכתבו על בסיסם.</p>'}
 /* ---------- task cards: one square card per task, the main way tasks are shown ---------- */
@@ -899,7 +927,7 @@ function caseTab(o,c,tab){
   const id=c.id,body=o.querySelector('#csBody');o.querySelectorAll('[data-cst]').forEach(b=>b.setAttribute('aria-selected',b.dataset.cst===tab));
   if(tab==='tasks'){
     const ts=[...S.tasks.values()].filter(t=>t.caseId===id);const open=ts.filter(t=>!t.done).sort((a,b)=>a.due.localeCompare(b.due)),done=ts.filter(t=>t.done).sort((a,b)=>b.due.localeCompare(a.due));
-    body.innerHTML=`${S.canWrite?`<button class="addcard" type="button" data-act="newTask" data-id="${esc(id)}">+ משימה או מועד חדש</button>`:''}
+    body.innerHTML=`${S.admin?'':'<p class="muted" style="margin:0 0 8px">מוצגות רק המשימות שלך בתיק.</p>'}${S.canWrite?`<div class="row"><button class="addcard" type="button" data-act="newTask" data-id="${esc(id)}">+ משימה או מועד חדש</button><button class="addcard" type="button" data-act="multiTask" data-id="${esc(id)}">+ כמה משימות בבת אחת</button></div>`:''}
       ${open.length?cardGrid(open,{showCase:false,mode:'upcoming'}):'<div class="empty"><h3>אין משימות פתוחות בתיק</h3><p>לחצו "+ משימה או מועד חדש" כדי לקבוע את הצעד הבא.</p></div>'}
       ${done.length?`<details style="margin-top:14px"><summary class="muted" style="cursor:pointer">משימות שבוצעו (${done.length})</summary>${cardGrid(done,{showCase:false})}</details>`:''}`;
   }else if(tab==='log'){
@@ -928,6 +956,7 @@ async function caseSheet(id,tab){
     ${S.canWrite?`<div class="bigacts">
       <button type="button" data-act="status" data-id="${esc(id)}"><span>📝</span>עדכון סטטוס</button>
       <button type="button" data-act="newTask" data-id="${esc(id)}"><span>📅</span>משימה / מועד</button>
+      <button type="button" data-act="multiTask" data-id="${esc(id)}"><span>🗂️</span>כמה משימות</button>
       <button type="button" data-act="draftCase" data-id="${esc(id)}"><span>✎</span>נסח מסמך</button>
       <button type="button" data-act="editCase" data-id="${esc(id)}"><span>⚙️</span>פרטי התיק</button>
       ${isClosed(c)?`<button type="button" data-act="reopen" data-id="${esc(id)}"><span>↩</span>פתח מחדש</button>`:`<button type="button" class="danger" data-act="closeCase" data-id="${esc(id)}"><span>🔒</span>סגירת תיק</button>`}
@@ -1236,9 +1265,14 @@ async function renderSettings(){
         <label class="f"><span>קוד אישי (4 ספרות לפחות)</span><input type="password" name="pin" inputmode="numeric" minlength="4" required autocomplete="new-password"></label>
         <div class="actions" style="grid-column:1/-1"><button class="btn" type="submit">שמור מנהל</button></div></form>
       <div class="actions"><button class="btn ghost" type="button" id="admOut">יציאה ממצב מנהל</button></div></div>
+    <form class="card" id="pinF"><h3>קודים אישיים לעובדים</h3><p class="muted">כל עובד רואה רק את המשימות שלו. כדי שעובד לא יוכל להיכנס בשם של עובד אחר, קבעו לו קוד אישי. הוא יקליד אותו כשהוא בוחר בשם שלו.</p>
+      <ul class="docs">${ppl.filter(p=>!admins.includes(p)).map(p=>`<li><span class="av">${esc(initials(p))}</span><span class="nm">${esc(p)}</span>${(S.withCode||[]).includes(p)?'<span class="chip ok">🔒 יש קוד</span>':'<span class="chip">בלי קוד</span>'}</li>`).join('')}</ul>
+      <div class="grid2"><label class="f"><span>עובד</span><select name="name">${ppl.filter(p=>!admins.includes(p)).map(p=>`<option>${esc(p)}</option>`).join('')}</select></label>
+        <label class="f"><span>קוד אישי (4 ספרות לפחות)</span><input type="password" name="pin" inputmode="numeric" autocomplete="new-password"></label></div>
+      <div class="actions"><button class="btn" type="submit">שמור קוד</button><button class="btn ghost" type="button" id="pinX">בטל את הקוד של העובד</button></div></form>
     <div class="card" id="cldC"><h3>שיחה עם Claude</h3>
       <p>מחברים את <b>אפליקציית Claude</b> במחשב הזה למערכת. אחר כך אפשר לכתוב לו בשפה רגילה, והוא קורא ומעדכן את המערכת ישירות. למשל:</p>
-      <ul style="margin:0;padding-inline-start:20px;display:flex;flex-direction:column;gap:4px"><li>"מה דחוף היום?"</li><li>"בתיק של בן ציון לוי הוגש כתב הגנה היום. תעדכן."</li><li>"תפתח לסיוון משימה להגיש תגובה בתיק נובה עד 5.11."</li><li>"בעסקה של סעידה ולטיפה נרשמה הערת אזהרה."</li><li>"תנסח טיוטת הודעת עדכון בתיק אלפרד כהן לפי המסמכים בתיק."</li></ul>
+      <ul style="margin:0;padding-inline-start:20px;display:flex;flex-direction:column;gap:4px"><li>"מה דחוף היום?"</li><li>"בתיק של [שם הלקוח] הוגש כתב הגנה היום. תעדכן."</li><li>"תפתח ל[שם העובד] משימה להגיש תגובה בתיק [שם הלקוח] עד 5.11."</li><li>"בעסקה של [שם הלקוח] נרשמה הערת אזהרה."</li><li>"תנסח טיוטת הודעת עדכון בתיק [שם הלקוח] לפי המסמכים בתיק."</li></ul>
       <p class="note">החיבור עובד רק באפליקציית Claude שמותקנת <b>במחשב הראשי</b> (המחשב שבו פועלת המערכת). <a href="https://claude.ai/download" target="_blank" rel="noopener">להורדת אפליקציית Claude</a></p>
       <div id="cldBox" class="row"><span class="muted">בודק…</span></div></div>
     <div class="card" id="updC"><h3>עדכוני תוכנה</h3><p class="muted">גרסה מותקנת: <b id="updCur">…</b></p>
@@ -1251,10 +1285,13 @@ async function renderSettings(){
   $V().innerHTML=`<div class="cols">${peopleCard}${adminCards}</div>`;
   $('#pF').addEventListener('submit',async e=>{e.preventDefault();const n=new FormData(e.target).get('n').trim();if(n&&!ppl.includes(n))await savePeople([...ppl,n]);render()});
   $('#whoBtn').addEventListener('click',()=>showWho(true));
-  document.querySelectorAll('[data-admlogin]').forEach(b=>b.addEventListener('click',()=>adminPinGate(b.dataset.admlogin,()=>{document.querySelector('.gate')?.remove();render()})));
+  document.querySelectorAll('[data-admlogin]').forEach(b=>b.addEventListener('click',()=>codeGate(b.dataset.admlogin,render)));
   $('#firstAdm')?.addEventListener('submit',async e=>{e.preventDefault();const d=Object.fromEntries(new FormData(e.target));
     try{await api('POST','/api/admin/set',d);await fetch('/api/admin/login',{method:'POST',credentials:'same-origin',headers:{'Content-Type':'application/json'},body:JSON.stringify(d)});S.admin=d.name;setMe(d.name);await loadAdmin();toast(`${d.name} הוגדר כמנהל`);render()}catch(x){toast(x.message||'השמירה נכשלה')}});
   if(!adm)return;
+  const savePin=async(name,pin)=>{try{await api('POST','/api/user/pin',{name,pin});S.withCode=(await api('GET','/api/user')).withCode||[];toast(pin?`נקבע קוד ל${name}`:`הקוד של ${name} בוטל`);render()}catch(x){toast(x.message||'השמירה נכשלה')}};
+  $('#pinF').addEventListener('submit',e=>{e.preventDefault();const d=Object.fromEntries(new FormData(e.target));if((d.pin||'').length<4){toast('קוד של 4 ספרות לפחות');return}savePin(d.name,d.pin)});
+  $('#pinX').addEventListener('click',()=>{const n=$('#pinF').elements.name.value;if(n&&confirm(`לבטל את הקוד של ${n}?`))savePin(n,'')});
   const look=$('#lookF'),preview=()=>{const d=Object.fromEntries(new FormData(look));S.settings.theme={...(S.settings.theme||{}),...d};applyTheme()};
   look.addEventListener('change',e=>{if(e.target.type==='radio')preview()});
   $('#logoF').addEventListener('change',async e=>{const f=e.target.files[0];if(!f)return;if(f.size>2e6){toast('התמונה גדולה מדי (עד 2MB)');return}
@@ -1499,6 +1536,7 @@ document.addEventListener('click',async e=>{
     case'assign':closeAll();assignSheet(id);break;
     case'take':await saveTask(id,{assignee:S.me?.name||'',seen:true});toast('המשימה אצלך');break;
     case'newTask':closeAll();taskForm(null,id||'');break;
+    case'multiTask':closeAll();multiTaskForm(id);break;
     case'editCase':closeAll();caseForm(S.cases.get(id));break;
     case'goImport':S.sub={...(S.sub||{}),tools:'excel'};go('tools');break;
     case'goNH':go('nh');break;
@@ -1525,7 +1563,7 @@ function showSetup(){
   gate(`<h1>ברוכים הבאים</h1><p>ארבע שאלות קצרות, ומתחילים. אפשר לשנות הכול אחר כך בהגדרות.</p>
     <form id="su" class="card" style="gap:16px">
       <label class="f"><span>1. שם המשרד</span><input type="text" name="officeName" placeholder='למשל: משרד עו"ד שמיר' required></label>
-      <label class="f"><span>2. מי עובד במשרד? שם אחד בכל שורה</span><textarea name="people" id="suPpl" style="min-height:120px" placeholder="לדוגמה:&#10;יוסי&#10;צבי&#10;סיוון" required></textarea></label>
+      <label class="f"><span>2. מי עובד במשרד? שם אחד בכל שורה</span><textarea name="people" id="suPpl" style="min-height:120px" placeholder="לדוגמה:&#10;יוסי&#10;דנה&#10;רון" required></textarea></label>
       <div class="grid2"><label class="f"><span>3. מי מנהל המערכת?</span><select name="adminName" id="suAdm" required><option value="">כתבו קודם את השמות למעלה</option></select></label>
       <label class="f"><span>קוד אישי למנהל (4 ספרות לפחות)</span><input type="password" name="adminPin" inputmode="numeric" minlength="4" required autocomplete="new-password"></label></div>
       <p class="note">המנהל מוסיף ומסיר עובדים, משנה את העיצוב ומגדיר מנהלים נוספים. הוא מקליד את הקוד האישי כשהוא בוחר בשם שלו.</p>
@@ -1557,25 +1595,34 @@ function setMe(name){if(S.me?.name!==name&&!S.ownerSet){S.owner=[...S.tasks.valu
 function markAdmin(){document.body.classList.toggle('not-admin',!S.admin);const b=$('#meName');if(b)b.innerHTML=esc(S.me?.name||'—')+(S.admin?' <span class="adm-badge">מנהל</span>':'')}
 async function loadAdmin(){try{const a=await api('GET','/api/admin');S.admin=a.admin&&a.admin===S.me?.name?a.admin:null;S.admins=a.admins||[];
   if(a.admin&&a.admin!==S.me?.name){await fetch('/api/admin/logout',{method:'POST',credentials:'same-origin'});S.admin=null}}catch(e){S.admin=null;S.admins=[]}markAdmin()}
-function adminPinGate(name,after){
-  gate(`<h1>שלום ${esc(name)}</h1><p>אתה מוגדר כמנהל המערכת. הקלד את הקוד האישי שלך.</p>
-    <form id="ap" class="card" style="gap:14px"><label class="f"><span>קוד אישי</span><input type="password" name="pin" inputmode="numeric" autocomplete="current-password" required></label>
+const post=(url,body)=>fetch(url,{method:'POST',credentials:'same-origin',headers:{'Content-Type':'application/json'},body:JSON.stringify(body||{})});
+const hasCode=n=>(S.withCode||[]).includes(n)||(S.admins||[]).includes(n);
+/* each employee signs in with their name (and personal code, if the manager set one) and sees only their own tasks */
+function codeGate(name,after){
+  const isAdm=(S.admins||[]).includes(name);
+  gate(`<h1>שלום ${esc(name)}</h1><p>${isAdm?'את/ה מוגדר/ת כמנהל/ת המערכת. ':''}הקלידו את הקוד האישי שלכם.</p>
+    <form id="ap" class="card" style="gap:14px"><label class="f"><span>קוד אישי</span><input type="password" name="pin" inputmode="numeric" autocomplete="current-password" required autofocus></label>
     <p class="note" id="apErr" style="color:var(--late)"></p>
-    <div class="actions"><button class="btn" type="submit">כניסה כמנהל</button><button class="btn ghost" type="button" id="apSkip">המשך בלי הרשאות מנהל</button></div>
-    <p class="note">שכחת את הקוד? במחשב הראשי, בתיקייה C:\\LawBoard, לחץ פעמיים על reset-code.bat, ואז הגדר מנהל מחדש בהגדרות.</p></form>`,
-  g=>{g.querySelector('#apSkip').addEventListener('click',async()=>{await fetch('/api/admin/logout',{method:'POST',credentials:'same-origin'});S.admin=null;setMe(name);g.remove();after&&after()});
+    <div class="actions"><button class="btn" type="submit">כניסה</button><button class="btn ghost" type="button" id="apBack">זה לא אני</button></div>
+    <p class="note">${isAdm?'שכחת את הקוד? במחשב הראשי, בתיקייה C:\\LawBoard, לחץ/י פעמיים על reset-code.bat, ואז הגדר/י מנהל מחדש בהגדרות.':'שכחתם את הקוד? בקשו מהמנהל לקבוע לכם קוד חדש.'}</p></form>`,
+  g=>{g.querySelector('#apBack').addEventListener('click',()=>{g.remove();showWho(false)});
     g.querySelector('#ap').addEventListener('submit',async e=>{e.preventDefault();const pin=new FormData(e.target).get('pin');
-      const r=await fetch('/api/admin/login',{method:'POST',credentials:'same-origin',headers:{'Content-Type':'application/json'},body:JSON.stringify({name,pin})});
-      if(r.ok){S.admin=name;setMe(name);g.remove();after&&after()}else{let m='הקוד לא נכון';try{m=(await r.json()).error||m}catch(x){}g.querySelector('#apErr').textContent=m}})});
+      const r=await post(isAdm?'/api/admin/login':'/api/user/login',{name,pin});
+      if(r.ok){S.admin=isAdm?name:null;signedIn(name);g.remove();after&&after()}else{let m='הקוד לא נכון';try{m=(await r.json()).error||m}catch(x){}g.querySelector('#apErr').textContent=m}})});
 }
-function pick(name){
-  if((S.admins||[]).includes(name))return adminPinGate(name,()=>{document.querySelector('.gate')?.remove();render()});
-  fetch('/api/admin/logout',{method:'POST',credentials:'same-origin'});S.admin=null;setMe(name);document.querySelector('.gate')?.remove();render();
+function signedIn(name){setMe(name);S.db?.refresh?.('tasks')}
+async function pick(name){
+  document.querySelector('.gate')?.remove();
+  await post('/api/admin/logout');S.admin=null;
+  if(hasCode(name))return codeGate(name,render);
+  const r=await post('/api/user/login',{name});
+  if(!r.ok)return codeGate(name,render);
+  signedIn(name);render();
 }
 function showWho(canCancel){
   const ppl=S.people||[];
   gate(`<h1>מי עובד/ת על המחשב הזה?</h1><p>לחצו על השם שלכם. כך המערכת יודעת מי עדכן כל דבר. אפשר להחליף בכל רגע מהתפריט.</p>
-    <div class="picker">${ppl.map(p=>`<button type="button" data-who="${esc(p)}"><span class="av">${esc(initials(p))}</span>${esc(p)}${(S.admins||[]).includes(p)?'<span class="adm-badge">מנהל</span>':''}</button>`).join('')}</div>
+    <div class="picker">${ppl.map(p=>`<button type="button" data-who="${esc(p)}"><span class="av">${esc(initials(p))}</span>${esc(p)}${(S.admins||[]).includes(p)?'<span class="adm-badge">מנהל</span>':hasCode(p)?' 🔒':''}</button>`).join('')}</div>
     <form id="wf" class="row"><input type="text" name="n" placeholder="השם שלי לא ברשימה — הקלידו כאן" style="flex:1 1 220px;width:auto"><button class="btn ghost" type="submit">הוסף והמשך</button></form>
     ${canCancel?'<div class="actions"><button class="btn ghost" type="button" id="wc">ביטול</button></div>':''}`,
   g=>{g.querySelectorAll('[data-who]').forEach(b=>b.addEventListener('click',()=>pick(b.dataset.who)));
@@ -1643,13 +1690,16 @@ async function init(){
   try{const pp=await S.db.doc('settings/people').get();S.people=pp.exists?pp.data().list||[]:(S.settings.people||[])}catch(e){S.people=S.settings.people||[]}
   applyTheme();
   let saved='';try{saved=localStorage.getItem('lb.me')||''}catch(e){}
+  let su={};try{su=await api('GET','/api/user')}catch(e){}
+  S.withCode=su.withCode||[];
   if(saved)S.me={name:saved};
   await loadAdmin();
-  if(saved)setMe(saved);
+  if(saved&&su.user!==saved&&!hasCode(saved)&&(await post('/api/user/login',{name:saved})).ok)su.user=saved;
+  if(saved&&su.user===saved)setMe(saved);else saved='';
   render();
   setTimeout(updNotice,3000);
-  if(!saved)showWho(false);
-  else if(S.admins.includes(saved)&&!S.admin)adminPinGate(saved,()=>{document.querySelector('.gate')?.remove();render()});
+  if(!saved){let last='';try{last=localStorage.getItem('lb.me')||''}catch(e){}
+    if(last&&hasCode(last))codeGate(last,render);else showWho(false)}
   const sub=(col)=>S.db.collection(col).onSnapshot(snap=>{const m=new Map();snap.docs.forEach(d=>m.set(d.id,{id:d.id,...d.data()}));S[col]=m;S.loaded[col]=true;soon()},err=>{S.loaded[col]=true;if(err?.code!=='auth')toast('אין חיבור למחשב הראשי. בודק שוב…')});
   sub('cases');sub('tasks');sub('deals');
   const nhc=async()=>{try{const n=(await api('GET','/api/c/inbox?lite=1')).filter(i=>i.status!=='done').length;if($('#nhCount'))$('#nhCount').textContent=n||''}catch(e){}};nhc();setInterval(nhc,60e3);
