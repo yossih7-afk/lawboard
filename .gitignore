@@ -1,0 +1,4 @@
+data/
+seed.json
+__pycache__/
+*.pyc

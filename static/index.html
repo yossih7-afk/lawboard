@@ -1,0 +1,1352 @@
+<!doctype html>
+<html lang="he" dir="rtl">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>לוח בקרת תיקים</title>
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='6' fill='%231D5C74'/%3E%3Cpath d='M9 8h14v3H9zm0 6.5h14v3H9zM9 21h9v3H9z' fill='white'/%3E%3C/svg%3E">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Frank+Ruhl+Libre:wght@500;700&family=Assistant:wght@400;600;700&display=swap">
+<script src="/static/vendor/xlsx.full.min.js"></script>
+<style>
+/* Layout: a docket ledger. Greeting + plain-language summary, tab bar, then one working view. Severity is a side stripe on each row; planned work is a progress strip. */
+:root{
+  --bg:#F2F3EF; --surface:#FFFFFF; --sunk:#E9EBE5; --ink:#18212B; --muted:#56616C; --line:#D8DCD4;
+  --accent:#1D5C74; --accent-ink:#FFFFFF;
+  --late:#B42318; --late-bg:#FBEAE7; --today:#9A5806; --today-bg:#FCF1DE;
+  --soon:#1D5C74; --soon-bg:#E3EEF2; --ok:#2E6A3E; --ok-bg:#E5F1E8;
+  --display:"Frank Ruhl Libre", "David", "Times New Roman", serif;
+  --body:"Assistant", "Segoe UI", Arial, sans-serif;
+  --r:8px;
+}
+@media (prefers-color-scheme: dark){:root:not([data-theme="light"]){
+  --bg:#11161C; --surface:#19212A; --sunk:#141B22; --ink:#E6EAED; --muted:#9AA6B1; --line:#2A3540;
+  --accent:#73B6CF; --accent-ink:#0B1A20;
+  --late:#F28B7E; --late-bg:#3A1E1B; --today:#E9B15C; --today-bg:#352914;
+  --soon:#73B6CF; --soon-bg:#15303A; --ok:#7FC491; --ok-bg:#1A3222; color-scheme:dark;}}
+:root[data-theme="dark"]{
+  --bg:#11161C; --surface:#19212A; --sunk:#141B22; --ink:#E6EAED; --muted:#9AA6B1; --line:#2A3540;
+  --accent:#73B6CF; --accent-ink:#0B1A20;
+  --late:#F28B7E; --late-bg:#3A1E1B; --today:#E9B15C; --today-bg:#352914;
+  --soon:#73B6CF; --soon-bg:#15303A; --ok:#7FC491; --ok-bg:#1A3222; color-scheme:dark;}
+*{box-sizing:border-box}
+[hidden]{display:none!important}
+img{max-width:100%}
+html{background:var(--bg)}
+body{margin:0;background:var(--bg);color:var(--ink);font-family:var(--body);font-size:16px;line-height:1.55;direction:rtl;
+  padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px));padding-block:0 56px}
+.wrap{max-width:1080px;margin:0 auto}
+header.top{display:flex;flex-wrap:wrap;align-items:flex-end;justify-content:space-between;gap:12px;padding-block:22px 14px;border-bottom:1px solid var(--line)}
+h1{font-family:var(--display);font-weight:700;font-size:1.9rem;margin:0;line-height:1.1;text-wrap:balance}
+.dateline{color:var(--muted);font-size:.95rem;display:flex;gap:10px;flex-wrap:wrap}
+.dateline b{color:var(--ink);font-weight:600}
+nav.tabs{display:flex;gap:4px;overflow-x:auto;padding-block:10px;border-bottom:1px solid var(--line)}
+nav.tabs button{background:none;border:0;font:inherit;color:var(--muted);padding:8px 13px;border-radius:var(--r);cursor:pointer;white-space:nowrap;font-weight:600}
+nav.tabs button[aria-selected="true"]{background:var(--ink);color:var(--bg)}
+nav.tabs button:hover:not([aria-selected="true"]){background:var(--sunk);color:var(--ink)}
+button,input,select,textarea{font:inherit;color:inherit}
+:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+.btn{background:var(--accent);color:var(--accent-ink);border:0;border-radius:var(--r);padding:9px 16px;font-weight:700;cursor:pointer;text-decoration:none;display:inline-block}
+.btn.ghost{background:transparent;color:var(--ink);border:1px solid var(--line)}
+.btn.danger{background:transparent;color:var(--late);border:1px solid var(--late)}
+.btn.sm{padding:4px 10px;font-size:.85rem}
+.btn:disabled{opacity:.5;cursor:default}
+input[type=text],input[type=date],input[type=time],input[type=number],input[type=search],select,textarea{background:var(--surface);border:1px solid var(--line);border-radius:var(--r);padding:8px 10px;width:100%;min-width:0}
+textarea{min-height:140px;resize:vertical}
+label.f{display:flex;flex-direction:column;gap:4px;font-size:.88rem;color:var(--muted);min-width:0}
+label.f > span{font-weight:600}
+.grid2{display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:12px}
+.row{display:flex;gap:8px;flex-wrap:wrap;align-items:center}
+.muted{color:var(--muted)}
+.banner{margin-top:14px;padding:10px 14px;border-radius:var(--r);background:var(--today-bg);color:var(--ink);display:flex;gap:12px;align-items:center;justify-content:space-between;flex-wrap:wrap}
+section.view{padding-top:18px}
+.hello{font-family:var(--display);font-size:1.45rem;margin:0 0 4px;font-weight:500}
+.hello-sub{margin:0 0 18px;color:var(--muted);max-width:70ch}
+.hello-sub b{color:var(--ink)}
+.summary{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:10px;margin-bottom:24px}
+.stat{background:var(--surface);border:1px solid var(--line);border-radius:var(--r);padding:10px 14px;border-inline-start:4px solid var(--c,var(--line))}
+.stat .n{font-family:var(--display);font-size:1.9rem;line-height:1;font-variant-numeric:tabular-nums}
+.stat .l{color:var(--muted);font-size:.88rem}
+@media (max-width:620px){.summary{grid-template-columns:repeat(2,minmax(0,1fr))}}
+.group{margin-bottom:24px}
+.group h2{font-family:var(--display);font-weight:500;font-size:1.25rem;margin:0 0 8px;display:flex;gap:8px;align-items:baseline;flex-wrap:wrap}
+.group h2 small{font-family:var(--body);font-size:.88rem;color:var(--muted)}
+ul.tasks{list-style:none;margin:0;padding:0;background:var(--surface);border:1px solid var(--line);border-radius:var(--r)}
+li.task{display:grid;grid-template-columns:auto minmax(0,1fr) auto;gap:12px;align-items:center;padding:11px 12px;border-bottom:1px solid var(--line);border-inline-start:4px solid var(--sev,transparent)}
+li.task:last-child{border-bottom:0}
+li.task.s-late{--sev:var(--late)} li.task.s-today{--sev:var(--today)} li.task.s-soon{--sev:var(--soon)} li.task.s-done{opacity:.55}
+.check{width:24px;height:24px;border-radius:50%;border:2px solid var(--muted);background:transparent;cursor:pointer;display:grid;place-items:center;padding:0}
+.check[aria-pressed="true"]{background:var(--ok);border-color:var(--ok);color:var(--bg)}
+.t-title{font-weight:600;cursor:pointer}
+.t-title:hover{text-decoration:underline}
+.t-meta{color:var(--muted);font-size:.87rem;display:flex;flex-wrap:wrap;gap:4px 10px;align-items:center}
+.t-meta a{color:var(--accent);cursor:pointer;text-decoration:none;font-variant-numeric:tabular-nums}
+.t-meta a.dr{font-weight:700}
+.t-when{text-align:left;font-variant-numeric:tabular-nums;white-space:nowrap}
+.t-when b{display:block;font-size:.95rem}
+.t-when span{color:var(--muted);font-size:.82rem}
+.s-late .t-when b{color:var(--late)} .s-today .t-when b{color:var(--today)}
+.prog{display:flex;gap:3px;margin-top:5px}
+.prog i{height:5px;flex:1;max-width:26px;border-radius:3px;background:var(--line)}
+.prog i.on{background:var(--accent)} .prog i.now{background:var(--today)}
+.chip{display:inline-block;font-size:.76rem;font-weight:700;padding:1px 8px;border-radius:99px;background:var(--sunk);color:var(--ink);letter-spacing:.02em}
+.chip.crit{background:var(--late-bg);color:var(--late)}
+.chip.hear{background:var(--soon-bg);color:var(--soon)}
+.chip.prep{background:var(--today-bg);color:var(--today)}
+.chip.ok{background:var(--ok-bg);color:var(--ok)}
+.chip.src{background:transparent;border:1px solid var(--line);color:var(--muted);font-weight:600}
+.empty{background:var(--surface);border:1px dashed var(--line);border-radius:var(--r);padding:26px;text-align:center;color:var(--muted)}
+.empty h3{font-family:var(--display);color:var(--ink);margin:0 0 6px;font-weight:500}
+.toolbar{display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-bottom:12px}
+.toolbar input[type=search]{flex:1 1 220px;width:auto}
+.toolbar select{width:auto}
+.tablewrap{overflow-x:auto;background:var(--surface);border:1px solid var(--line);border-radius:var(--r)}
+table{border-collapse:collapse;width:100%;min-width:760px}
+th,td{text-align:right;padding:9px 12px;border-bottom:1px solid var(--line);vertical-align:top}
+th{font-size:.8rem;color:var(--muted);font-weight:700;letter-spacing:.03em;background:var(--sunk)}
+tbody tr{cursor:pointer} tbody tr:hover{background:var(--sunk)}
+td.num{font-variant-numeric:tabular-nums;white-space:nowrap}
+.card{background:var(--surface);border:1px solid var(--line);border-radius:var(--r);padding:16px;display:flex;flex-direction:column;gap:12px;min-width:0}
+.card h3{font-family:var(--display);font-weight:500;font-size:1.25rem;margin:0}
+.card p{margin:0}
+.cols{display:grid;grid-template-columns:repeat(auto-fit,minmax(300px,1fr));gap:16px;align-items:start}
+.result{background:var(--soon-bg);border-radius:var(--r);padding:14px}
+.result .big{font-family:var(--display);font-size:1.6rem}
+.note{font-size:.84rem;color:var(--muted)}
+.cal{display:grid;gap:10px}
+.day{background:var(--surface);border:1px solid var(--line);border-radius:var(--r);display:grid;grid-template-columns:110px minmax(0,1fr);overflow:hidden}
+.day.is-today{border-color:var(--accent);box-shadow:0 0 0 1px var(--accent)}
+.day.weekend{opacity:.75}
+.day .dh{background:var(--sunk);padding:10px;display:flex;flex-direction:column;gap:2px}
+.day .dh b{font-family:var(--display);font-size:1.15rem;font-weight:500}
+.day .dh span{font-size:.8rem;color:var(--muted)}
+.day .items{padding:8px 12px;display:flex;flex-direction:column;gap:6px;min-width:0}
+.ev{display:flex;gap:8px;align-items:baseline;flex-wrap:wrap;cursor:pointer}
+.ev:hover .evt{text-decoration:underline}
+.ev .tm{font-variant-numeric:tabular-nums;font-weight:700;min-width:42px}
+.ev.work{color:var(--muted)}
+@media (max-width:560px){.day{grid-template-columns:1fr}.day .dh{flex-direction:row;gap:8px;align-items:baseline}}
+.overlay{position:fixed;inset:0;background:rgb(0 0 0 / .45);display:flex;justify-content:center;align-items:flex-start;overflow:auto;z-index:20;
+  padding:max(24px,env(safe-area-inset-top,0px)) max(12px,env(safe-area-inset-right,0px)) 24px max(12px,env(safe-area-inset-left,0px))}
+.sheet{background:var(--bg);border-radius:12px;width:min(780px,100%);padding:20px;display:flex;flex-direction:column;gap:14px;box-shadow:0 20px 50px rgb(0 0 0 / .3)}
+.sheet h2{font-family:var(--display);margin:0;font-weight:700;font-size:1.4rem}
+.sheet h3{font-family:var(--display);margin:6px 0 0;font-weight:500;font-size:1.15rem}
+.sheet .actions{display:flex;gap:8px;justify-content:flex-start;flex-wrap:wrap}
+dl.kv{display:grid;grid-template-columns:max-content minmax(0,1fr);gap:4px 14px;margin:0}
+dl.kv dt{color:var(--muted)} dl.kv dd{margin:0}
+ul.docs{list-style:none;margin:0;padding:0;border:1px solid var(--line);border-radius:var(--r);background:var(--surface)}
+ul.docs li{display:flex;gap:10px;align-items:center;flex-wrap:wrap;padding:8px 12px;border-bottom:1px solid var(--line)}
+ul.docs li:last-child{border-bottom:0}
+ul.docs li .nm{flex:1 1 200px;min-width:0;overflow-wrap:anywhere}
+.drop{border:2px dashed var(--line);border-radius:var(--r);padding:14px;text-align:center;color:var(--muted);background:var(--surface)}
+.drop.over{border-color:var(--accent);background:var(--soon-bg)}
+.toast{position:fixed;bottom:max(16px,env(safe-area-inset-bottom,0px));left:50%;transform:translateX(-50%);background:var(--ink);color:var(--bg);padding:10px 18px;border-radius:var(--r);z-index:30;font-weight:600;max-width:90vw}
+.seg{display:inline-flex;background:var(--sunk);border-radius:var(--r);padding:3px;gap:2px}
+.seg button{border:0;background:none;font:inherit;font-weight:700;padding:7px 14px;border-radius:6px;cursor:pointer;color:var(--muted)}
+.seg button[aria-selected="true"]{background:var(--surface);color:var(--ink);box-shadow:0 1px 3px rgb(0 0 0 / .12)}
+.flt{display:flex;flex-wrap:wrap;gap:6px;margin-bottom:12px}
+.flt button{font:inherit;font-size:.88rem;border:1px solid var(--line);background:var(--surface);border-radius:99px;padding:4px 12px;cursor:pointer;color:var(--ink)}
+.flt button[aria-pressed="true"]{background:var(--ink);color:var(--bg);border-color:var(--ink)}
+.flt .fl-late b{color:var(--late)} .flt .fl-nodate b,.flt .fl-stale b{color:var(--today)}
+.flt button[aria-pressed="true"] b{color:inherit}
+table.ctl{min-width:1000px}
+table.ctl tbody tr{cursor:default}
+table.ctl tr.r-late td:first-child{box-shadow:inset -4px 0 0 var(--late)}
+table.ctl a{color:var(--ink);text-decoration:none;cursor:pointer} table.ctl a:hover{text-decoration:underline}
+td.st,td.ed{cursor:pointer;max-width:280px} td.st:hover,td.ed:hover{background:var(--soon-bg)}
+.clamp{display:-webkit-box;-webkit-line-clamp:3;-webkit-box-orient:vertical;overflow:hidden}
+.sm{font-size:.8rem;display:block}
+.tl{color:var(--late);font-weight:700}
+.prop{display:grid;grid-template-columns:auto 130px 1fr 150px 140px;gap:8px;align-items:center;padding:8px 0;border-bottom:1px solid var(--line)}
+@media (max-width:700px){.prop{grid-template-columns:auto 1fr}.prop > *:nth-child(n+3){grid-column:2}}
+textarea.draft{min-height:420px;line-height:1.75;font-size:15.5px;white-space:pre-wrap}
+.help h3{margin-top:4px}
+.help ol{margin:0;padding-inline-start:22px;display:flex;flex-direction:column;gap:6px}
+.kbd{font-family:var(--body);font-weight:700;background:var(--sunk);padding:0 6px;border-radius:4px}
+@media (prefers-reduced-motion:reduce){*{transition:none!important}}
+/* ===== redesign: sidebar app shell ===== */
+:root{
+  --bg:#F5F4EF; --surface:#FFFFFF; --sunk:#ECEBE4; --ink:#1B2630; --muted:#5B6670; --line:#DEDCD3;
+  --accent:#265E85; --accent-ink:#FFFFFF; --side:#16222C; --side-ink:#E9EEF2; --side-muted:#93A2AE;
+  --r:10px;
+}
+@media (prefers-color-scheme: dark){:root:not([data-theme="light"]){
+  --bg:#10161C; --surface:#18212A; --sunk:#141C23; --ink:#E7ECEF; --muted:#9DA9B3; --line:#2A3540;
+  --accent:#7DB4DA; --accent-ink:#0C1822; --side:#0B1116; --side-ink:#E7ECEF; --side-muted:#7F8E9A; color-scheme:dark}}
+:root[data-theme="dark"]{
+  --bg:#10161C; --surface:#18212A; --sunk:#141C23; --ink:#E7ECEF; --muted:#9DA9B3; --line:#2A3540;
+  --accent:#7DB4DA; --accent-ink:#0C1822; --side:#0B1116; --side-ink:#E7ECEF; --side-muted:#7F8E9A; color-scheme:dark}
+body{font-size:1.0625rem;padding:0}
+:root{--muted:#4A5560}
+body.not-admin .adm-only{display:none!important}
+.brand .logo.has-img{width:auto;height:52px;max-width:130px;background:#fff;padding:4px;border-radius:10px}
+.brand .logo.has-img img{height:100%;width:auto;max-width:122px;object-fit:contain;display:block}
+.brand:has(.logo.has-img){flex-direction:column;align-items:flex-start;gap:8px}
+.asg{font:inherit;font-size:.85rem;font-weight:600;border:1px solid var(--line);background:var(--surface);color:var(--ink);border-radius:99px;padding:2px 10px;cursor:pointer}
+.asg.none{border-style:dashed;color:var(--accent)}
+.asg:hover{border-color:var(--accent)}
+.chip.new{background:var(--accent);color:var(--accent-ink)}
+.sect{font-family:var(--display);font-weight:500;font-size:1.2rem;margin:0 0 10px;display:flex;gap:8px;align-items:baseline;flex-wrap:wrap}
+.sect small{font-family:var(--body);font-size:.85rem}
+.wlgrid{display:grid;grid-template-columns:repeat(auto-fill,minmax(170px,1fr));gap:10px;margin-bottom:20px}
+.wl{font:inherit;text-align:right;display:grid;grid-template-columns:auto 1fr;gap:2px 10px;align-items:center;padding:12px;border:1.5px solid var(--line);border-radius:12px;background:var(--surface);color:var(--ink);cursor:pointer}
+.wl .av{grid-row:span 3}
+.wl:hover{border-color:var(--accent)} .wl.on{border-color:var(--accent);background:var(--soon-bg)}
+.wl-n{font-size:.9rem} .wl-s{font-size:.8rem;color:var(--muted)}
+.adm-badge{display:inline-block;font-size:.7rem;font-weight:700;background:var(--today-bg);color:var(--today);border-radius:99px;padding:0 7px;margin-inline-start:4px;vertical-align:middle}
+.swatches{display:flex;flex-wrap:wrap;gap:10px}
+.sw{display:flex;flex-direction:column;align-items:center;gap:4px;font-size:.85rem;color:var(--ink);cursor:pointer}
+.sw input{position:absolute;opacity:0}
+.sw span{width:40px;height:40px;border-radius:50%;border:3px solid var(--surface);box-shadow:0 0 0 2px var(--line)}
+.sw input:checked+span{box-shadow:0 0 0 3px var(--ink)}
+.sw input:focus-visible+span{outline:2px solid var(--accent);outline-offset:3px}
+.opt{display:inline-flex;align-items:center;gap:6px;padding:7px 12px;border-radius:7px;cursor:pointer;color:var(--ink);font-weight:600}
+.opt:has(input:checked){background:var(--surface);box-shadow:0 1px 3px rgb(0 0 0 / .15)}
+:focus-visible{outline:3px solid var(--accent);outline-offset:2px}
+.app{display:grid;grid-template-columns:250px minmax(0,1fr);min-height:100vh}
+.side{background:var(--side);color:var(--side-ink);display:flex;flex-direction:column;gap:18px;padding:22px 14px;position:sticky;top:0;height:100vh}
+.brand{display:flex;gap:10px;align-items:center;padding:0 6px}
+.brand .logo{width:40px;height:40px;border-radius:10px;background:var(--accent);color:var(--accent-ink);display:grid;place-items:center;flex:none}
+.brand b{display:block;font-family:var(--display);font-size:1.15rem;line-height:1.2}
+.brand small{color:var(--side-muted);font-size:.8rem}
+.nav{display:flex;flex-direction:column;gap:4px;flex:1;overflow:auto}
+.nav button{display:flex;gap:12px;align-items:center;width:100%;text-align:right;background:none;border:0;color:var(--side-ink);font:inherit;font-size:1rem;font-weight:600;padding:11px 12px;border-radius:9px;cursor:pointer;opacity:.85}
+.nav button svg{flex:none;opacity:.9}
+.nav button:hover{background:rgb(255 255 255 / .07);opacity:1}
+.nav button[aria-current="page"]{background:var(--accent);color:var(--accent-ink);opacity:1}
+.nav .cnt{margin-inline-start:auto;background:#C0392B;color:#fff;border-radius:99px;font-size:.75rem;padding:0 8px;line-height:1.6}
+.nav .cnt:empty{display:none}
+.me{display:flex;gap:10px;align-items:center;background:rgb(255 255 255 / .06);border:0;border-radius:10px;padding:10px;color:var(--side-ink);font:inherit;cursor:pointer;text-align:right}
+.me small{display:block;color:var(--side-muted);font-size:.75rem} .me b{font-size:.95rem}
+.av{width:34px;height:34px;border-radius:50%;background:var(--accent);color:var(--accent-ink);display:grid;place-items:center;font-weight:700;flex:none}
+.main{min-width:0;padding-left:max(28px,env(safe-area-inset-left,0px));padding-right:max(28px,env(safe-area-inset-right,0px));padding-block:0 60px}
+.ph{display:flex;justify-content:space-between;align-items:flex-start;gap:16px;flex-wrap:wrap;padding-block:26px 18px;border-bottom:1px solid var(--line)}
+.ph h1{font-family:var(--display);font-size:2rem;margin:0;line-height:1.15}
+.ph p{margin:6px 0 0;color:var(--muted);max-width:62ch}
+.ph-side{display:flex;flex-direction:column;align-items:flex-end;gap:10px}
+.btn{padding:10px 18px;border-radius:9px}
+.card{border-radius:12px;padding:20px}
+ul.tasks,.tablewrap,.stat,.empty,.day{border-radius:12px}
+li.task{padding:14px 16px}
+.check{width:auto;height:auto;border-radius:99px;padding:5px 12px;font-size:.85rem;font-weight:700;color:var(--ink);gap:4px;border:1.5px solid var(--line);background:var(--surface);white-space:nowrap}
+.check:hover{border-color:var(--ok);color:var(--ok)}
+.check[aria-pressed="true"]{background:var(--ok);border-color:var(--ok);color:var(--bg)}
+.welcome{background:var(--surface);border:1px solid var(--line);border-radius:14px;padding:22px;margin-bottom:24px;display:grid;gap:14px}
+.welcome h2{font-family:var(--display);margin:0;font-size:1.45rem;font-weight:500}
+.steps{display:grid;grid-template-columns:repeat(auto-fit,minmax(210px,1fr));gap:12px}
+.step{background:var(--sunk);border-radius:12px;padding:14px;display:flex;flex-direction:column;gap:6px}
+.step .n{width:28px;height:28px;border-radius:50%;background:var(--accent);color:var(--accent-ink);display:grid;place-items:center;font-weight:700}
+.step b{font-size:1.02rem}
+.step span{color:var(--muted);font-size:.92rem}
+.picker{display:grid;grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:10px}
+.picker button{font:inherit;font-weight:700;font-size:1.05rem;padding:16px 10px;border-radius:12px;border:1.5px solid var(--line);background:var(--surface);color:var(--ink);cursor:pointer;display:flex;flex-direction:column;align-items:center;gap:8px}
+.picker button:hover{border-color:var(--accent);background:var(--soon-bg)}
+.gate{position:fixed;inset:0;background:var(--bg);z-index:40;display:flex;justify-content:center;align-items:flex-start;overflow:auto;padding:max(40px,env(safe-area-inset-top,0px)) 16px 40px}
+.gate .box{width:min(620px,100%);display:flex;flex-direction:column;gap:16px}
+.gate h1{font-family:var(--display);font-size:2rem;margin:0}
+.gate p{margin:0;color:var(--muted)}
+.seg{margin-bottom:16px}
+@media (max-width:860px){
+  .app{grid-template-columns:1fr}
+  .side{position:sticky;top:0;height:auto;flex-direction:row;align-items:center;padding:8px max(12px,env(safe-area-inset-right,0px)) 8px max(12px,env(safe-area-inset-left,0px));gap:8px;z-index:10}
+  .brand small,.brand div,.me span:not(.av){display:none}
+  .nav{flex-direction:row;overflow-x:auto;flex:1;min-width:0}
+  .side{max-width:100vw;overflow:hidden}
+  .app{width:100%;overflow-x:hidden}
+  .me{flex:none;padding:6px}
+  .nav button{width:auto;white-space:nowrap;padding:8px 10px;font-size:.9rem}
+  .nav button span.lbl{display:inline}
+  .main{padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px))}
+  .ph-side{align-items:flex-start}
+}
+</style>
+</head>
+<body>
+<div class="app">
+  <aside class="side" aria-label="תפריט ראשי">
+    <div class="brand"><span class="logo" aria-hidden="true"><svg viewBox="0 0 24 24" width="22" height="22"><path d="M5 4h14v3H5zm0 6.5h14v3H5zM5 17h9v3H5z" fill="currentColor"/></svg></span><div><b id="officeName">לוח בקרת תיקים</b><small>ניהול תיקים ומועדים</small></div></div>
+    <nav id="tabs" class="nav"></nav>
+    <button class="me" id="meBtn" type="button" title="החלפת משתמש"><span class="av" id="meAv">?</span><span><small>מחובר/ת כ־</small><b id="meName">—</b></span></button>
+  </aside>
+  <main class="main">
+    <header class="ph">
+      <div class="ph-text"><h1 id="pTitle">היום שלי</h1><p id="pDesc"></p></div>
+      <div class="ph-side"><div class="dateline"><b id="gDate"></b><span id="hDate"></span></div>
+        <div class="row"><button class="btn ghost" id="copyBrief" type="button">העתק סיכום בוקר</button><button class="btn" id="addCaseBtn" type="button">+ תיק חדש</button></div></div>
+    </header>
+    <div id="banners"></div>
+    <section class="view" id="view"></section>
+  </main>
+</div>
+
+<script>
+const KINDS={
+  hearing:{l:'דיון',crit:true}, defense:{l:'כתב הגנה',crit:true}, appeal:{l:'ערעור',crit:true},
+  leave:{l:'בקשת רשות ערעור',crit:true}, setaside:{l:'ביטול פס"ד',crit:true},
+  response:{l:'תגובה לבקשה'}, reply:{l:'תשובה לתגובה'}, affidavits:{l:'תצהירים'},
+  discovery:{l:'הליכים מקדמיים'}, submission:{l:'הגשה / הודעה'}, internal:{l:'משימה פנימית'}
+};
+/* default working days a task needs before its deadline; editable per task */
+const EFFORT={defense:5,appeal:6,leave:4,setaside:2,response:2,reply:1,affidavits:5,discovery:3,submission:1,hearing:2,internal:0};
+const RULES=[
+  {k:'defense',l:'כתב הגנה — סדר דין רגיל',d:60,from:'המצאת כתב התביעה'},
+  {k:'defense',l:'כתב הגנה — סדר דין מהיר',d:30,from:'המצאת כתב התביעה'},
+  {k:'response',l:'תגובה לבקשה',d:10,from:'המצאת הבקשה'},
+  {k:'reply',l:'תשובה לתגובה',d:3,from:'המצאת התגובה'},
+  {k:'appeal',l:'ערעור בזכות על פסק דין',d:60,from:'מתן פסק הדין / המצאתו'},
+  {k:'leave',l:'בקשת רשות ערעור',d:30,from:'מתן ההחלטה / המצאתה'},
+  {k:'setaside',l:'ביטול פס"ד שניתן בהיעדר',d:30,from:'המצאת פסק הדין'},
+  {k:'submission',l:'מועד לפי החלטת בית המשפט',d:null,from:'מתן ההחלטה'}
+];
+const DOC_KINDS=['החלטה','פסק דין','פרוטוקול','כתב תביעה','כתב הגנה','כתב תשובה','בקשה','תגובה','תשובה לתגובה','תצהיר','חוות דעת','מכתב / תכתובת','מסמך שלנו (טיוטה/הוגש)','אחר'];
+const S={cases:new Map(),tasks:new Map(),db:null,sample:null,assets:null,canWrite:true,loaded:{cases:false,tasks:false},view:'today',q:'',owner:'',caseView:'open',flt:'',sort:null,tStatus:'open',xls:null,props:[]};
+const $=s=>document.querySelector(s);
+const $V=()=>document.getElementById('sub')||document.getElementById('view');
+const esc=s=>String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+const pad=n=>String(n).padStart(2,'0');
+const iso=d=>d.getFullYear()+'-'+pad(d.getMonth()+1)+'-'+pad(d.getDate());
+const pISO=s=>{const[y,m,d]=s.split('-').map(Number);return new Date(y,m-1,d)};
+const today=()=>iso(new Date());
+const dd=(a,b)=>Math.round((pISO(b)-pISO(a))/864e5);
+const addDays=(s,n)=>{const d=pISO(s);d.setDate(d.getDate()+n);return iso(d)};
+const DOW=['א׳','ב׳','ג׳','ד׳','ה׳','ו׳','ש׳'];
+const DOWL=['ראשון','שני','שלישי','רביעי','חמישי','שישי','שבת'];
+const fmt=s=>{if(!s)return'';const d=pISO(s);return `יום ${DOW[d.getDay()]} ${d.getDate()}.${d.getMonth()+1}.${String(d.getFullYear()).slice(2)}`};
+const rel=n=>n<0?(n===-1?'אתמול':`לפני ${-n} ימים`):n===0?'היום':n===1?'מחר':n===2?'מחרתיים':`בעוד ${n} ימים`;
+/* office days are Sunday–Thursday */
+const isBiz=s=>{const g=pISO(s).getDay();return g!==5&&g!==6};
+const prevBiz=s=>{let d=addDays(s,-1);while(!isBiz(d))d=addDays(d,-1);return d};
+const subBiz=(s,n)=>{let d=s;while(n>0){d=addDays(d,-1);if(isBiz(d))n--}return d};
+const bizBetween=(a,b)=>{let n=0,d=a;while(d<=b){if(isBiz(d))n++;d=addDays(d,1)}return n};
+
+function toast(msg){const t=document.createElement('div');t.className='toast';t.textContent=msg;document.body.appendChild(t);setTimeout(()=>t.remove(),2800)}
+function caseOf(t){return S.cases.get(t.caseId)||null}
+function openTasks(){return [...S.tasks.values()].filter(t=>!t.done&&t.due)}
+function effortOf(t){return t.effort!==undefined&&t.effort!==''&&t.effort!==null?Math.max(0,+t.effort||0):(EFFORT[t.kind]??1)}
+/* work window: N office days ending the office day before the deadline (one day kept for review and filing) */
+function plan(t){
+  const e=effortOf(t);if(!e)return{e:0,start:t.due,end:t.due};
+  const end=prevBiz(t.due),start=t.workFrom||subBiz(end,e-1);
+  return{e,start,end};
+}
+function workState(t){
+  const p=plan(t),T=today();if(!p.e||T<p.start||T>=t.due)return null;
+  const done=bizBetween(p.start,T),left=bizBetween(T,p.end);
+  return{...p,dayN:Math.min(done,p.e),left,tight:left<p.e-done+1&&T>p.start};
+}
+function bucket(t){if(t.done)return'done';const n=dd(today(),t.due);return n<0?'late':n===0?'today':n<=3?'soon':n<=7?'week':n<=30?'month':'later'}
+function score(t){const n=dd(today(),t.due);return n-(KINDS[t.kind]?.crit?1.5:0)+(t.time?parseInt(t.time)/100:0)}
+const byPri=(a,b)=>score(a)-score(b);
+function people(){const s=new Set();for(const c of S.cases.values())c.owner&&s.add(c.owner);for(const t of S.tasks.values())t.assignee&&s.add(t.assignee);return[...s].sort((a,b)=>a.localeCompare(b,'he'))}
+function nextFor(caseId){return openTasks().filter(t=>t.caseId===caseId).sort((a,b)=>a.due.localeCompare(b.due)||(a.time||'').localeCompare(b.time||''))[0]}
+function mine(t){if(!S.owner)return true;if(S.owner==='__none')return !t.assignee;return t.assignee===S.owner||(!t.assignee&&caseOf(t)?.owner===S.owner)}
+function asgHTML(t){
+  if(t.done)return t.assignee?`<span>${esc(t.assignee)}</span>`:'';
+  if(S.admin)return `<button type="button" class="asg ${t.assignee?'':'none'}" data-act="assign" data-id="${esc(t.id)}" title="שיוך לעובד">👤 ${esc(t.assignee||'לשייך לעובד')}</button>`;
+  if(!t.assignee)return `<button type="button" class="asg none" data-act="take" data-id="${esc(t.id)}" title="לקחת את המשימה אליי">✋ אני אטפל</button>`;
+  return `<span>👤 ${esc(t.assignee)}</span>`;
+}
+function assignSheet(id){
+  const t=S.tasks.get(id);if(!t)return;const ppl=S.people||[];
+  sheet(`<h2>למי להעביר את המשימה?</h2><p class="muted">${esc(t.title||'')} · ${esc(caseLabel(caseOf(t)))} · ${fmt(t.due)}</p>
+    <div class="picker">${ppl.map(p=>`<button type="button" data-to="${esc(p)}" ${p===t.assignee?'style="border-color:var(--accent);background:var(--soon-bg)"':''}><span class="av">${esc(initials(p))}</span>${esc(p)}<small class="muted">${openTasks().filter(x=>x.assignee===p).length} פתוחות</small></button>`).join('')}</div>
+    <div class="actions">${t.assignee?'<button class="btn ghost" type="button" data-to="">בטל שיוך</button>':''}<button class="btn ghost" type="button" data-close>ביטול</button></div>`,
+  o=>o.querySelectorAll('[data-to]').forEach(b=>b.addEventListener('click',async()=>{const to=b.dataset.to;
+    await saveTask(id,{assignee:to,assignedBy:S.me?.name||'',assignedAt:new Date().toISOString(),seen:to===S.me?.name});
+    if(t.caseId&&to!==t.assignee)await addLog(t.caseId,`המשימה "${t.title||''}" ${to?'הועברה ל'+to:'הוחזרה ללא שיוך'}`,today());
+    o.remove();toast(to?`הועבר ל${to}`:'השיוך בוטל')})));
+}
+function markSeen(t){if(t&&t.assignee&&t.assignee===S.me?.name&&t.seen===false)saveTask(t.id,{seen:true})}
+function caseLabel(c){return c?(c.client||c.number||'תיק'):''}
+
+/* ---------- rendering ---------- */
+function header(){
+  const d=new Date();
+  $('#gDate').textContent=d.toLocaleDateString('he-IL',{weekday:'long',day:'numeric',month:'long',year:'numeric'});
+  try{$('#hDate').textContent=new Intl.DateTimeFormat('he-u-ca-hebrew',{day:'numeric',month:'long',year:'numeric'}).format(d)}catch(e){}
+}
+function banners(){
+  const b=[];
+  if(!S.db)b.push(`<div class="banner"><span>הנתונים המשותפים של המשרד לא נטענו בתצוגה זו. פתחו את הדף כשאתם מחוברים לחשבון.</span></div>`);
+  else if(!S.canWrite)b.push(`<div class="banner"><span>אין לכם הרשאה לעדכן. פנו למנהל המערכת.</span></div>`);
+  $('#banners').innerHTML=b.join('');
+}
+function progBar(w){return `<div class="prog" aria-label="יום ${w.dayN} מתוך ${w.e}">${Array.from({length:w.e},(_,i)=>`<i class="${i<w.dayN-1?'on':i===w.dayN-1?'now':''}"></i>`).join('')}</div>`}
+function taskRow(t,{showCase=true,mode=''}={}){
+  const c=caseOf(t),b=bucket(t),n=dd(today(),t.due),k=KINDS[t.kind]||KINDS.internal;
+  const sev=b==='late'||b==='today'?b:(b==='soon'?'soon':b==='done'?'done':'');
+  const w=!t.done?workState(t):null,p=plan(t);
+  const chips=[`<span class="chip ${t.kind==='hearing'?'hear':k.crit?'crit':''}">${esc(k.l)}</span>`];
+  if(w)chips.push(`<span class="chip ${w.tight?'crit':'prep'}">${t.kind==='hearing'?'הכנה לדיון':'לעבוד על זה'} · יום ${w.dayN} מתוך ${w.e}${w.tight?' · לחוץ בזמן':''}</span>`);
+  else if(mode==='upcoming'&&p.e)chips.push(`<span class="chip ok">להתחיל ${fmt(p.start)}</span>`);
+  if(t.source&&t.source!=='ידני')chips.push(`<span class="chip src">${esc(t.source)}</span>`);
+  const draftLbl=t.kind==='hearing'?'הכנה לדיון':'טיוטה';
+  return `<li class="task s-${sev}">
+    <button class="check" type="button" data-act="toggle" data-id="${esc(t.id)}" aria-pressed="${!!t.done}" title="${t.done?'החזר לרשימה':'סמן שהמשימה בוצעה'}" ${S.canWrite?'':'disabled'}>${t.done?'✓ בוצע':'✓ סיימתי'}</button>
+    <div style="min-width:0"><div class="t-title" data-act="editTask" data-id="${esc(t.id)}">${esc(t.title||k.l)}</div>
+      <div class="t-meta">${chips.join('')}${showCase&&c?`<a data-act="case" data-id="${esc(c.id)}">${esc(caseLabel(c))}</a><span>${esc([c.procType,c.number].filter(Boolean).join(' '))}</span>`:''}${asgHTML(t)}${t.assignee&&t.assignee===S.me?.name&&t.seen===false&&!t.done?'<span class="chip new">חדש לך</span>':''}${!t.done?`<a class="dr" data-act="draft" data-id="${esc(t.id)}">✎ ${draftLbl}</a>`:''}</div>
+      ${w?progBar(w):''}</div>
+    <div class="t-when"><b>${t.done?'בוצע':rel(n)}</b><span>${t.kind==='hearing'?'דיון ':'הגשה '}${fmt(t.due)}${t.time?' · '+esc(t.time):''}</span></div>
+  </li>`;
+}
+function greet(){const h=new Date().getHours();return h<12?'בוקר טוב':h<17?'צהריים טובים':'ערב טוב'}
+function ownerSelect(lbl){const ppl=[...new Set([...(S.people||[]),...people()])];return `<select id="ownerF" aria-label="סינון לפי עובד"><option value="">${lbl}</option>${ppl.map(p=>`<option value="${esc(p)}" ${p===S.owner?'selected':''}>${esc(p)}${p===S.me?.name?' (אני)':''}</option>`).join('')}<option value="__none" ${S.owner==='__none'?'selected':''}>לא שויכו</option></select>`}
+function renderToday(){
+  const T=today(),all=openTasks().filter(mine);
+  const late=all.filter(t=>t.due<T).sort(byPri);
+  const tod=all.filter(t=>t.due===T).sort(byPri);
+  const work=all.filter(t=>workState(t)).sort((a,b)=>a.due.localeCompare(b.due));
+  const up=all.filter(t=>t.due>T&&!workState(t)&&dd(T,t.due)<=30).sort((a,b)=>plan(a).start.localeCompare(plan(b).start)||a.due.localeCompare(b.due));
+  const hearWeek=all.filter(t=>t.kind==='hearing'&&t.due>=T&&dd(T,t.due)<=7).length;
+  const parts=[];
+  if(late.length)parts.push(`<b>${late.length}</b> מועדים שחלפו ולא סומנו`);
+  if(tod.length)parts.push(`<b>${tod.length}</b> להיום`);
+  if(work.length)parts.push(`<b>${work.length}</b> מסמכים שכדאי לעבוד עליהם עכשיו`);
+  let welcomed=false;try{welcomed=!!localStorage.getItem('lb.welcomed')}catch(e){}
+  let h=welcomed?'':`<div class="welcome"><h2>ככה זה עובד</h2><div class="steps">
+    <div class="step"><span class="n">1</span><b>כל בוקר — "היום שלי"</b><span>מה באיחור, מה להיום, ועל מה כדאי לעבוד עכשיו. כשמשהו בוצע, לוחצים "סיימתי".</span></div>
+    <div class="step"><span class="n">2</span><b>כל תיק — "התיקים"</b><span>טבלה כמו באקסל. לוחצים על "סטטוס אחרון" כדי לכתוב מה קרה. לוחצים על שם תיק כדי לראות הכול.</span></div>
+    <div class="step"><span class="n">3</span><b>החלטות חדשות — "נט המשפט"</b><span>שומרים עמוד מנט המשפט בלחיצה, והמערכת מציעה את המועדים שבו.</span></div>
+    <div class="step"><span class="n">4</span><b>כתב טענות — "✎ טיוטה"</b><span>ליד כל משימה. המערכת מכינה את כל החומר ל-Claude, ואתם מקבלים טיוטה.</span></div></div>
+    <div class="actions"><button class="btn" type="button" data-act="hideWelcome">הבנתי, אפשר להסתיר</button><button class="btn ghost" type="button" data-act="goCases">לטבלת התיקים</button></div></div>`;
+  const newMine=openTasks().filter(t=>t.assignee===S.me?.name&&t.seen===false);
+  if(newMine.length)h+=`<div class="banner" style="margin:0 0 16px;background:var(--soon-bg)"><span><b>${newMine.length} משימות חדשות הועברו אליך.</b> הן מסומנות "חדש לך" ברשימה.</span></div>`;
+  const unas=openTasks().filter(t=>!t.assignee).length;
+  if(S.admin&&unas)h+=`<div class="banner" style="margin:0 0 16px"><span>${unas} משימות פתוחות עוד לא שויכו לאף עובד.</span><button class="btn sm" type="button" data-act="goUnassigned">לשייך עכשיו</button></div>`;
+  h+=`<p class="hello">${greet()}${S.me?.name?', '+esc(S.me.name):''}.</p><p class="hello-sub">${S.loaded.tasks?(parts.length?'על השולחן שלך: '+parts.join(', ')+'.':'אין משהו דחוף היום.'):'טוען את מועדי המשרד…'} כשמשימה בוצעה לחצו "✓ סיימתי". לחיצה על שם המשימה פותחת אותה לעריכה.</p>
+  <div class="toolbar"><span class="muted">מציג משימות של</span>${ownerSelect('כל המשרד')}</div>
+  <div class="summary">
+    <div class="stat" style="--c:var(--late)"><div class="n">${late.length}</div><div class="l">באיחור</div></div>
+    <div class="stat" style="--c:var(--today)"><div class="n">${tod.length}</div><div class="l">להגיש / להופיע היום</div></div>
+    <div class="stat" style="--c:var(--accent)"><div class="n">${work.length}</div><div class="l">לעבוד עליהם עכשיו</div></div>
+    <div class="stat"><div class="n">${hearWeek}</div><div class="l">דיונים השבוע</div></div>
+  </div>`;
+  const sec=(list,title,sub,mode)=>list.length?`<div class="group"><h2>${title}<small>${sub}</small></h2><ul class="tasks">${list.map(t=>taskRow(t,{mode})).join('')}</ul></div>`:'';
+  const body=sec(late,'באיחור — לבדוק מיד','לסמן אם הוגש, או לבקש הארכה')+sec(tod,'היום','מועד אחרון או דיון היום')+sec(work,'על מה לעבוד עכשיו','חלון העבודה פתוח: המערכת מתכננת אחורה מהמועד','')+sec(up,'בקרוב','מתי להתחיל, לפי היקף העבודה','upcoming');
+  if(!S.loaded.tasks)h+=`<div class="empty">טוען…</div>`;
+  else if(!body)h+=`<div class="empty"><h3>אין מועדים פתוחים ב־30 הימים הקרובים</h3><p>הוסיפו תיק ומועד, או קלטו את קובץ האקסל ואת הודעות נט המשפט בלשונית "קליטה".</p><button class="btn" data-act="goImport" type="button">לקליטת תיקים</button></div>`;
+  else h+=body;
+  $V().innerHTML=h;
+}
+function renderCal(){
+  const T=today(),all=openTasks().filter(mine),days=[];
+  for(let i=0;i<21;i++)days.push(addDays(T,i));
+  const late=all.filter(t=>t.due<T).length;
+  let h=`<div class="toolbar">${ownerSelect('כל המשרד')}<span class="muted">שלושה שבועות קדימה: דיונים, מועדי הגשה וימי העבודה שתוכננו לכל מסמך.</span></div>`;
+  if(late)h+=`<div class="banner" style="margin:0 0 12px"><span>יש ${late} מועדים שחלפו ולא סומנו. הם מופיעים בלשונית "הבוקר שלי".</span></div>`;
+  h+='<div class="cal">'+days.map(d=>{
+    const g=pISO(d),ev=[];
+    for(const t of all.filter(t=>t.kind==='hearing'&&t.due===d).sort((a,b)=>(a.time||'').localeCompare(b.time||'')))ev.push(`<div class="ev" data-act="editTask" data-id="${esc(t.id)}"><span class="tm">${esc(t.time||'—')}</span><span class="chip hear">דיון</span><span class="evt">${esc(caseLabel(caseOf(t)))} · ${esc(t.title)}</span></div>`);
+    for(const t of all.filter(t=>t.kind!=='hearing'&&t.due===d).sort(byPri))ev.push(`<div class="ev" data-act="editTask" data-id="${esc(t.id)}"><span class="tm">⚑</span><span class="chip ${KINDS[t.kind]?.crit?'crit':'prep'}">מועד אחרון</span><span class="evt">${esc(caseLabel(caseOf(t)))} · ${esc(t.title)}</span></div>`);
+    if(isBiz(d))for(const t of all.filter(t=>{const p=plan(t);return p.e&&d>=p.start&&d<=p.end&&d<t.due}).sort((a,b)=>a.due.localeCompare(b.due))){const p=plan(t);
+      ev.push(`<div class="ev work" data-act="draft" data-id="${esc(t.id)}"><span class="tm">✎</span><span class="evt">${t.kind==='hearing'?'הכנה לדיון':'עבודה על'}: ${esc(caseLabel(caseOf(t)))} · ${esc(t.title)}</span><span class="muted">(יום ${bizBetween(p.start,d)} מתוך ${p.e}, הגשה ${fmt(t.due)})</span></div>`)}
+    let heb='';try{heb=new Intl.DateTimeFormat('he-u-ca-hebrew',{day:'numeric',month:'long'}).format(g)}catch(e){}
+    return `<div class="day ${d===T?'is-today':''} ${isBiz(d)?'':'weekend'}"><div class="dh"><b>${d===T?'היום':'יום '+DOWL[g.getDay()]}</b><span>${g.getDate()}.${g.getMonth()+1} · ${esc(heb)}</span></div><div class="items">${ev.join('')||'<span class="muted">—</span>'}</div></div>`;
+  }).join('')+'</div>';
+  $V().innerHTML=h;
+}
+/* ---------- control table: open and closed cases, like the office Excel ---------- */
+const CLOSE_REASONS=['ניתן פסק דין','פשרה / הסכם','נמחק','הוחלף ייצוג','הועבר לטיפול אחר','אחר'];
+const STALE_DAYS=30;
+function lastStatus(c){
+  if(c.log&&c.log.length)return c.log[c.log.length-1];
+  if(c.notes){const parts=String(c.notes).split(/;|\n/).map(s=>s.trim()).filter(Boolean);return{date:'',text:parts[parts.length-1]||c.notes,legacy:true}}
+  return null;
+}
+function touched(c){return (c.statusAt||c.log?.[c.log.length-1]?.date||c.createdAt||'').slice(0,10)}
+function caseFlags(c){
+  const nx=nextFor(c.id),f=[];
+  if(openTasks().some(t=>t.caseId===c.id&&t.due<today()))f.push('late');
+  if(!nx)f.push('nodate');
+  const tch=touched(c);if(!tch||dd(tch,today())>STALE_DAYS)f.push('stale');
+  return f;
+}
+const FLT={'':'כל הפתוחים',late:'יש מועד באיחור',nodate:'אין מועד הבא',stale:`לא עודכנו ${STALE_DAYS}+ יום`};
+function isClosed(c){return c.status==='סגור'}
+function renderCases(){
+  const q=S.q.trim(),closedView=S.caseView==='closed';
+  const all=[...S.cases.values()],open=all.filter(c=>!isClosed(c)),closed=all.filter(isClosed);
+  let list=closedView?closed:open;
+  if(S.owner)list=list.filter(c=>c.owner===S.owner);
+  if(q)list=list.filter(c=>[c.number,c.fileNo,c.title,c.client,c.court,c.judge,c.owner,c.side,c.action,c.notes,c.closeReason,lastStatus(c)?.text].join(' ').includes(q));
+  const cnt=k=>open.filter(c=>(!S.owner||c.owner===S.owner)&&caseFlags(c).includes(k)).length;
+  if(!closedView&&S.flt)list=list.filter(c=>caseFlags(c).includes(S.flt));
+  const sk=S.sort||{k:closedView?'closedAt':'next',d:closedView?-1:1};
+  const val=(c,k)=>k==='next'?(nextFor(c.id)?.due||'9999'):k==='touched'?touched(c):k==='closedAt'?(c.closedAt||''):String(c[k]||'');
+  list.sort((a,b)=>val(a,sk.k).localeCompare(val(b,sk.k),'he')*sk.d);
+  const th=(k,l)=>`<th data-sort="${k}" style="cursor:pointer" title="מיון">${l}${sk.k===k?(sk.d>0?' ▲':' ▼'):''}</th>`;
+  let table;
+  if(!closedView){
+    table=`<table class="ctl"><thead><tr>${th('fileNo','תיק משרד')}${th('client','לקוח / הליך')}${th('side','אנו מייצגים')}<th>סטטוס אחרון</th><th>פעולה לביצוע</th>${th('next','המועד הבא')}${th('owner','אחראי')}${th('touched','עודכן')}</tr></thead><tbody>${list.map(c=>{
+      const nx=nextFor(c.id),ls=lastStatus(c),fl=caseFlags(c),tch=touched(c),ago=tch?dd(tch,today()):null;
+      return `<tr class="${fl.includes('late')?'r-late':''}">
+        <td class="num"><a data-act="case" data-id="${esc(c.id)}">${esc(c.fileNo)||'—'}</a></td>
+        <td><a data-act="case" data-id="${esc(c.id)}"><b>${esc(c.client||c.title)}</b></a><br><span class="muted">${esc(c.procType)} ${esc(c.number)}</span></td>
+        <td>${esc(c.side)}</td>
+        <td class="st" data-act="status" data-id="${esc(c.id)}" title="לחצו להוספת עדכון סטטוס">${ls?`<span class="clamp">${esc(ls.text)}</span>${ls.date?`<span class="muted sm">${fmt(ls.date)}${ls.by?' · '+esc(ls.by):''}</span>`:''}`:'<span class="muted">+ הוסף סטטוס</span>'}</td>
+        <td class="ed" ${S.canWrite?`data-edit="action" data-id="${esc(c.id)}" title="לחצו לעריכה"`:''}><span class="clamp">${esc(c.action)||'<span class="muted">—</span>'}</span></td>
+        <td class="num">${nx?`<span class="${nx.due<today()?'tl':''}">${esc(KINDS[nx.kind]?.l||'')}<br>${fmt(nx.due)}</span>`:`<button class="btn ghost sm" type="button" data-act="newTask" data-id="${esc(c.id)}">+ לקבוע</button>`}</td>
+        <td class="ed" ${S.canWrite?`data-edit="owner" data-id="${esc(c.id)}" title="לחצו לעריכה"`:''}>${esc(c.owner)||'<span class="muted">—</span>'}</td>
+        <td class="num ${fl.includes('stale')?'tl':''}">${ago===null?'—':ago===0?'היום':`לפני ${ago} ימים`}</td></tr>`}).join('')}</tbody></table>`;
+  }else{
+    table=`<table class="ctl"><thead><tr>${th('fileNo','תיק משרד')}${th('client','שם התיק אצלנו')}<th>הליך</th>${th('side','הצד שייצגנו')}${th('closeReason','איך הסתיים')}<th>סטטוס אחרון</th>${th('closedAt','נסגר ביום')}<th></th></tr></thead><tbody>${list.map(c=>{const ls=lastStatus(c);
+      return `<tr><td class="num"><a data-act="case" data-id="${esc(c.id)}">${esc(c.fileNo)||'—'}</a></td><td><a data-act="case" data-id="${esc(c.id)}"><b>${esc(c.client||c.title)}</b></a></td><td><span class="clamp">${esc(c.proc||[c.procType,c.number,c.title].filter(Boolean).join(' '))}</span></td><td>${esc(c.side)}</td>
+      <td>${esc(c.closeReason||'')}${c.judgmentDate?`<br><span class="muted sm">פס"ד ${fmt(c.judgmentDate)}</span>`:''}</td><td><span class="clamp">${esc(ls?.text||'')}</span></td><td class="num">${c.closedAt?fmt(c.closedAt):'—'}</td>
+      <td>${S.canWrite?`<button class="btn ghost sm" type="button" data-act="reopen" data-id="${esc(c.id)}">פתח מחדש</button>`:''}</td></tr>`}).join('')}</tbody></table>`;
+  }
+  $V().innerHTML=`<div class="row" style="margin-bottom:12px"><div class="seg" role="tablist"><button type="button" data-cv="open" aria-selected="${!closedView}">תיקים פתוחים (${open.length})</button><button type="button" data-cv="closed" aria-selected="${closedView}">תיקים סגורים (${closed.length})</button></div>
+    <button class="btn ghost" type="button" id="xlsOut">ייצוא לאקסל</button></div>
+  ${closedView?'':`<div class="flt">${Object.entries(FLT).map(([k,l])=>`<button type="button" data-flt="${k}" aria-pressed="${S.flt===k}" class="${k?'fl-'+k:''}">${l}${k?` <b>${cnt(k)}</b>`:''}</button>`).join('')}</div>`}
+  <div class="toolbar"><input type="search" id="q" placeholder="חיפוש לפי לקוח, מספר תיק, צד, סטטוס…" value="${esc(S.q)}">${ownerSelect('כל עורכי הדין')}</div>
+  ${list.length?`<div class="tablewrap">${table}</div><p class="note">${list.length} תיקים. ${closedView?'':'לחיצה על "סטטוס אחרון" מוסיפה עדכון. לחיצה על "פעולה לביצוע" או "אחראי" מאפשרת לערוך ישירות.'}</p>`
+   :`<div class="empty"><h3>${!S.loaded.cases?'טוען תיקים…':closedView?'אין תיקים סגורים':S.flt?'אין תיקים בסינון הזה':'אין תיקים פתוחים'}</h3>${closedView&&S.loaded.cases?'<p>סוגרים תיק מתוך כרטיס התיק, בכפתור "סגירת תיק". אפשר גם לקלוט את גיליון "תיקים סגורים" מהאקסל בלשונית קליטה.</p>':''}</div>`}`;
+  $('#q').addEventListener('input',e=>{S.q=e.target.value;renderCases();const n=$('#q');n.focus();n.setSelectionRange(n.value.length,n.value.length)});
+  document.querySelectorAll('[data-cv]').forEach(b=>b.addEventListener('click',()=>{S.caseView=b.dataset.cv;S.sort=null;renderCases()}));
+  document.querySelectorAll('[data-flt]').forEach(b=>b.addEventListener('click',()=>{S.flt=b.dataset.flt;renderCases()}));
+  document.querySelectorAll('th[data-sort]').forEach(h=>h.addEventListener('click',()=>{const k=h.dataset.sort;S.sort={k,d:(S.sort||sk).k===k?-(S.sort||sk).d:1};renderCases()}));
+  $('#xlsOut').addEventListener('click',exportXlsx);
+}
+/* inline editing of a cell; Enter or leaving the cell saves */
+function startEdit(td){
+  if(td.querySelector('input'))return;const id=td.dataset.id,k=td.dataset.edit,c=S.cases.get(id);if(!c)return;
+  td.innerHTML=`<input type="text" value="${esc(c[k]||'')}" ${k==='owner'?'list="pplE"':''} style="min-width:140px"><datalist id="pplE">${people().map(p=>`<option value="${esc(p)}">`).join('')}</datalist>`;
+  const inp=td.querySelector('input');inp.focus();inp.select();S.editing=true;
+  let done=false;const fin=async save=>{if(done)return;done=true;S.editing=false;
+    if(save&&inp.value.trim()!==(c[k]||'')){const patch={[k]:inp.value.trim(),statusAt:today()};await saveCase(id,patch);toast('עודכן')}else renderCases()};
+  inp.addEventListener('keydown',e=>{if(e.key==='Enter')fin(true);if(e.key==='Escape'){e.stopPropagation();fin(false)}});
+  inp.addEventListener('blur',()=>fin(true));
+}
+function logHTML(c){
+  const items=[...(c.log||[])].reverse();
+  return `${items.length?`<ul class="docs">${items.map(l=>`<li><span class="num muted" style="min-width:80px">${l.date?fmt(l.date):''}</span><span class="nm">${esc(l.text)}</span><span class="muted sm">${esc(l.by||'')}</span></li>`).join('')}</ul>`:''}
+    ${c.notes?`<details ${items.length?'':'open'}><summary class="muted" style="cursor:pointer">היסטוריה מהאקסל</summary><p style="white-space:pre-wrap;margin:6px 0 0">${esc(c.notes)}</p></details>`:''}
+    ${!items.length&&!c.notes?'<p class="muted">עדיין אין עדכוני סטטוס.</p>':''}`;
+}
+function statusSheet(id){
+  const c=S.cases.get(id);if(!c)return;
+  sheet(`<h2>סטטוס — ${esc(caseLabel(c))}</h2><p class="muted">${esc([c.procType,c.number].filter(Boolean).join(' '))}</p>
+    ${S.canWrite?`<form id="sf" class="grid2"><label class="f" style="grid-column:1/-1"><span>מה קרה בתיק</span><textarea name="text" required style="min-height:80px" placeholder="למשל: הוגש כתב תשובה. ממתינים להחלטה בבקשה לעיכוב הליכים."></textarea></label>
+      <label class="f"><span>תאריך</span><input type="date" name="date" value="${today()}"></label>
+      <label class="f"><span>פעולה לביצוע (לא חובה)</span><input type="text" name="action" value="${esc(c.action||'')}"></label>
+      <div class="actions" style="grid-column:1/-1"><button class="btn" type="submit">הוסף עדכון</button><button class="btn ghost" type="button" data-close>סגור</button></div></form>`:''}
+    <h3>יומן הסטטוסים</h3>${logHTML(c)}`,
+  o=>o.querySelector('#sf')?.addEventListener('submit',async e=>{e.preventDefault();const d=Object.fromEntries(new FormData(e.target));
+    await addLog(id,d.text.trim(),d.date,d.action!==undefined?{action:d.action.trim()}:{});o.remove();toast('הסטטוס עודכן')}));
+}
+async function addLog(id,text,date,extra={}){
+  const c=S.cases.get(id);if(!c||!text)return;
+  const log=[...(c.log||[]),{date:date||today(),text,by:S.me?.name||''}].slice(-300);
+  await saveCase(id,{log,statusAt:today(),...extra});
+}
+function closeSheet(id){
+  const c=S.cases.get(id);if(!c)return;
+  const open=openTasks().filter(t=>t.caseId===id);
+  sheet(`<h2>סגירת תיק — ${esc(caseLabel(c))}</h2>
+    <form id="clf" class="grid2">
+      <label class="f"><span>איך הסתיים</span><select name="closeReason" id="clR">${CLOSE_REASONS.map(r=>`<option>${r}</option>`).join('')}</select></label>
+      <label class="f"><span>תאריך סגירה</span><input type="date" name="closedAt" value="${today()}" required></label>
+      <label class="f" id="jdL"><span>פסק הדין ניתן ביום</span><input type="date" name="judgmentDate" id="jd"></label>
+      <label class="f" style="grid-column:1/-1"><span>סטטוס אחרון</span><textarea name="text" required style="min-height:70px" placeholder="למשל: ניתן פסק דין לטובת הלקוח, הוצאות 5,000 ש&quot;ח. נשלח ללקוח."></textarea></label>
+      <label class="row" id="apL" style="grid-column:1/-1"><input type="checkbox" name="appeal" checked> <span>לפתוח מעקב על מועד ערעור (60 יום מפסק הדין) — כדי שלא יוחמץ</span></label>
+      ${open.length?`<p class="note" style="grid-column:1/-1">בתיק יש ${open.length} מועדים פתוחים. הם יסומנו כ"בוטל בסגירת התיק".</p>`:''}
+      <div class="actions" style="grid-column:1/-1"><button class="btn" type="submit">סגור את התיק</button><button class="btn ghost" type="button" data-close>ביטול</button></div></form>`,
+  o=>{const upd=()=>{const j=o.querySelector('#clR').value==='ניתן פסק דין';o.querySelector('#jdL').hidden=!j;o.querySelector('#apL').hidden=!j};o.querySelector('#clR').addEventListener('change',upd);upd();
+    o.querySelector('#clf').addEventListener('submit',async e=>{e.preventDefault();const d=Object.fromEntries(new FormData(e.target));const isJ=d.closeReason==='ניתן פסק דין';
+      for(const t of open)await saveTask(t.id,{done:true,doneAt:new Date().toISOString(),note:((t.note||'')+' · בוטל בסגירת התיק').trim()});
+      const log=[...(c.log||[]),{date:d.closedAt,text:`התיק נסגר (${d.closeReason}): ${d.text.trim()}`,by:S.me?.name||''}];
+      await saveCase(id,{status:'סגור',closeReason:d.closeReason,closedAt:d.closedAt,judgmentDate:isJ?d.judgmentDate||'':'',log,statusAt:today(),action:''});
+      if(isJ&&d.appeal&&d.judgmentDate){const due=calcDue(d.judgmentDate,60,true).due;
+        await saveTask(null,{caseId:id,kind:'appeal',title:'מועד אחרון לערעור — להחליט עם הלקוח אם מערערים',due,time:'',assignee:c.owner||'',source:'סגירת תיק',effort:0,note:'60 יום מפסק הדין (לא נמנו ימי פגרת קיץ). לאמת מול מועד ההמצאה.'})}
+      o.remove();toast('התיק עבר לתיקים הסגורים')});
+  });
+}
+function exportXlsx(){
+  if(!window.XLSX){toast('ספריית האקסל לא נטענה');return}
+  const all=[...S.cases.values()];
+  const openRows=all.filter(c=>!isClosed(c)).map(c=>{const nx=nextFor(c.id),ls=lastStatus(c);return{"תיק משרד":c.fileNo||'',"לקוח":c.client||'',"הליך":[c.procType,c.number].filter(Boolean).join(' '),"צדדים":c.title||'',"אנו מייצגים":c.side||'',"סטטוס אחרון":ls?.text||'',"תאריך סטטוס":ls?.date||'',"פעולה לביצוע":c.action||'',"המועד הבא":nx?nx.due:'',"סוג המועד":nx?(KINDS[nx.kind]?.l||''):'',"אחראי":c.owner||'',"עודכן":touched(c)}});
+  const closedRows=all.filter(isClosed).map(c=>({"תיק משרד":c.fileNo||'',"שם התיק אצלנו":c.client||'',"הליך":c.proc||[c.procType,c.number,c.title].filter(Boolean).join(' '),"הצד שייצגנו":c.side||'',"איך הסתיים":c.closeReason||'',"פסק דין ניתן ביום":c.judgmentDate||'',"סטטוס אחרון":lastStatus(c)?.text||'',"נסגר ביום":c.closedAt||''}));
+  const wb=XLSX.utils.book_new();wb.Workbook={Views:[{RTL:true}]};
+  const add=(rows,name)=>{const ws=XLSX.utils.json_to_sheet(rows.length?rows:[{}]);ws['!cols']=Object.keys(rows[0]||{}).map(k=>({wch:/סטטוס|פעולה|צדדים|הליך/.test(k)?50:16}));XLSX.utils.book_append_sheet(wb,ws,name)};
+  add(openRows,'תיקים פתוחים');add(closedRows,'תיקים סגורים');
+  const buf=XLSX.write(wb,{bookType:'xlsx',type:'array'}),a=document.createElement('a');
+  a.href=URL.createObjectURL(new Blob([buf],{type:'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'}));a.download=`טבלת שליטה ${today()}.xlsx`;
+  document.body.appendChild(a);a.click();setTimeout(()=>{URL.revokeObjectURL(a.href);a.remove()},1000);toast('הקובץ ירד לתיקיית ההורדות');
+}
+function workloadHTML(){
+  const T=today(),open=openTasks(),ppl=[...(S.people||[])];
+  const row=(name,key)=>{const ts=open.filter(t=>key==='__none'?!t.assignee:t.assignee===name);const late=ts.filter(t=>t.due<T).length,week=ts.filter(t=>t.due>=T&&dd(T,t.due)<=7).length;
+    return `<button type="button" class="wl ${S.owner===key?'on':''}" data-owner="${esc(key)}"><span class="av">${key==='__none'?'?':esc(initials(name))}</span><b>${esc(name)}</b><span class="wl-n"><b>${ts.length}</b> פתוחות</span><span class="wl-s">${late?`<span class="tl">${late} באיחור</span> · `:''}${week} השבוע</span></button>`};
+  return `<div class="wlgrid">${ppl.map(p=>row(p,p)).join('')}${row('לא שויכו','__none')}</div>`;
+}
+function renderTasks(){
+  let list=[...S.tasks.values()].filter(t=>t.due);
+  if(S.tStatus==='open')list=list.filter(t=>!t.done);else if(S.tStatus==='done')list=list.filter(t=>t.done);
+  list=list.filter(mine);
+  list.sort((a,b)=>a.due.localeCompare(b.due)||(a.time||'').localeCompare(b.time||''));
+  $V().innerHTML=`<h3 class="sect">עומס לפי עובד <small class="muted">לחצו על עובד כדי לראות את המשימות שלו${S.admin?'. לחצו על 👤 ליד משימה כדי להעביר אותה':''}</small></h3>${workloadHTML()}<div class="toolbar"><select id="tStatus" aria-label="סטטוס"><option value="open">פתוחים</option><option value="done">בוצעו</option><option value="all">הכול</option></select>
+  ${ownerSelect('כל המשרד')}
+  ${S.canWrite?'<button class="btn ghost" data-act="newTask" type="button">+ מועד / משימה</button>':''}</div>
+  ${list.length?`<ul class="tasks">${list.map(t=>taskRow(t,{mode:'upcoming'})).join('')}</ul>`:`<div class="empty"><h3>אין מועדים ברשימה</h3></div>`}`;
+  $('#tStatus').value=S.tStatus;
+}
+function calcDue(start,days,skipRecess){
+  let d=start,c=0,skipped=0;
+  const inRecess=s=>{const m=+s.slice(5,7),x=+s.slice(8,10);return (m===7&&x>=16)||m===8};
+  while(c<days){d=addDays(d,1);if(skipRecess&&inRecess(d)){skipped++;continue}c++}
+  let rolled=0;while([5,6].includes(pISO(d).getDay())){d=addDays(d,1);rolled++}
+  return{due:d,skipped,rolled};
+}
+function caseOptions(sel){return [...S.cases.values()].filter(c=>c.status!=='סגור').sort((a,b)=>caseLabel(a).localeCompare(caseLabel(b),'he')).map(c=>`<option value="${esc(c.id)}" ${c.id===sel?'selected':''}>${esc(caseLabel(c))} — ${esc(c.number||c.fileNo)}</option>`).join('')}
+function renderCalc(){
+  $V().innerHTML=`<div class="cols">
+  <form class="card" id="calcF"><h3>חישוב מועד הגשה</h3>
+    <label class="f"><span>סוג המועד</span><select id="cRule">${RULES.map((r,i)=>`<option value="${i}">${esc(r.l)}${r.d?` (${r.d} ימים)`:''}</option>`).join('')}</select></label>
+    <div class="grid2"><label class="f"><span id="cFromL">מיום</span><input type="date" id="cStart" value="${today()}"></label>
+    <label class="f"><span>מספר ימים</span><input type="number" id="cDays" min="1" max="365"></label></div>
+    <label class="row"><input type="checkbox" id="cRecess" checked> <span>לא למנות ימי פגרת קיץ (16.7–31.8)</span></label>
+    <div class="result" id="cOut" aria-live="polite"></div>
+    <label class="f"><span>שיוך לתיק</span><select id="cCase"><option value="">בחרו תיק…</option>${caseOptions()}</select></label>
+    <div class="row"><button class="btn" type="submit" ${S.canWrite?'':'disabled'}>הוסף כמועד לתיק</button></div>
+  </form>
+  <div class="card"><h3>איך המחשבון סופר</h3>
+    <p>סופר ימים קלנדריים מהיום שאחרי האירוע (המצאה, מתן החלטה). מועד שנופל ביום שישי או בשבת עובר ליום ראשון שאחריו.</p>
+    <p>ברירות המחדל לקוחות מתקנות סדר הדין האזרחי, התשע״ט–2018, להליך אזרחי רגיל. בית משפט לענייני משפחה, בית הדין לעבודה, הליכים פליליים ומנהליים כפופים לכללים אחרים. מועד שקבע בית המשפט בהחלטה גובר על ברירת המחדל.</p>
+    <p class="note">המחשבון לא מכיר את פגרות פסח וסוכות ואת ימי החג. לפני הגשה, עורך הדין האחראי בודק את המועד מול ההחלטה ומול התקנות.</p>
+  </div></div>`;
+  const upd=()=>{const r=RULES[$('#cRule').value];$('#cFromL').textContent='מיום '+r.from;
+    const days=+$('#cDays').value;if(!days||!$('#cStart').value){$('#cOut').innerHTML='<span class="muted">הזינו מספר ימים.</span>';return}
+    const x=calcDue($('#cStart').value,days,$('#cRecess').checked),n=dd(today(),x.due);
+    const p=plan({kind:r.k,due:x.due});
+    $('#cOut').innerHTML=`<div class="muted">המועד האחרון להגשה</div><div class="big">${fmt(x.due)}</div><div>${rel(n)}${x.skipped?` · לא נמנו ${x.skipped} ימי פגרה`:''}${x.rolled?' · נדחה מסוף שבוע':''}</div>${p.e?`<div class="note">להתחיל לעבוד: ${fmt(p.start)} (${p.e} ימי עבודה)</div>`:''}`;S.calc={...x,rule:r,days}};
+  $('#cRule').addEventListener('change',()=>{const r=RULES[$('#cRule').value];$('#cDays').value=r.d||'';upd()});
+  ['#cStart','#cDays','#cRecess'].forEach(s=>$(s).addEventListener('input',upd));
+  $('#cDays').value=RULES[0].d;upd();
+  $('#calcF').addEventListener('submit',async e=>{e.preventDefault();const cid=$('#cCase').value;if(!cid){toast('בחרו תיק לשיוך');return}if(!S.calc)return;
+    const r=S.calc.rule;await saveTask(null,{caseId:cid,kind:r.k,title:r.l,due:S.calc.due,time:'',assignee:S.cases.get(cid)?.owner||'',source:'מחשבון',note:`${S.calc.days} ימים מיום ${fmt($('#cStart').value)} (${r.from})`});toast('המועד נוסף לתיק')});
+}
+
+/* ---------- import ---------- */
+const MAP_FIELDS=[['fileNo','תיק משרד',/תיק שלנו|תיק משרד|^מס' התיק$/],['number','מספר הליך בבית המשפט',/מספר הליך|פרטי ההליך|שם ומס' התיק|הליך/],['client','לקוח / שם התיק אצלנו',/לקוח|שם התיק/],['title','צדדים',/צדדים|כותרת|נגד/],['court','ערכאה',/בית.?(ה)?משפט|ערכאה|בית דין/],['judge','שופט',/שופט|מותב/],['owner','עו"ד אחראי',/אחראי|מטפל|עו"ד|עורך/],['side','הצד שאנו מייצגים',/מייצגים/],['hearing','תאריך דיון',/דיון|ישיבה/],['hearingTime','שעת דיון',/שעה/],['deadline','מועד הגשה',/מועד|הגשה|יעד/],['deadlineTitle','מה להגיש',/פעולה|מה להגיש|משימה/],['notes','הערות / סטטוס',/הערות|סטטוס/],['closeNote','פסק דין / איך הסתיים',/פסה"ד|פסק דין|הסתיים/]];
+function cellDate(v){
+  if(v===''||v==null)return null;
+  if(typeof v==='number'&&v>20000&&v<80000){const d=new Date(Date.UTC(1899,11,30)+Math.floor(v)*864e5);return d.getUTCFullYear()+'-'+pad(d.getUTCMonth()+1)+'-'+pad(d.getUTCDate())}
+  const m=String(v).match(/(\d{1,2})[./-](\d{1,2})[./-](\d{2,4})/);if(m){let y=+m[3];if(y<100)y+=2000;return y+'-'+pad(+m[2])+'-'+pad(+m[1])}
+  const m2=String(v).match(/(\d{4})-(\d{2})-(\d{2})/);return m2?m2[0]:null;
+}
+function cellTime(v){if(typeof v==='number'&&v<1){const m=Math.round(v*1440);return pad(Math.floor(m/60))+':'+pad(m%60)}if(typeof v==='number'&&v>20000){const f=v%1;if(f>0.0001){const m=Math.round(f*1440);return pad(Math.floor(m/60))+':'+pad(m%60)}return''}const m=String(v??'').match(/(\d{1,2}):(\d{2})/);return m?pad(+m[1])+':'+m[2]:''}
+function renderImport(mode){
+  const x=S.xls;
+  $V().innerHTML=`<div class="cols">
+  ${mode==='excel'?'':`<div class="card"><h3>הדבקה מנט המשפט</h3>
+    <p class="muted">העתיקו טקסט מ"היומן שלי" בנט המשפט, מהודעת מייל של נט המשפט, או מהחלטה. המערכת מזהה מספרי תיקים (למשל 12345-01-26), תאריכים, שעות וביטויים כמו "תוך 10 ימים".</p>
+    <textarea id="paste" placeholder="לדוגמה:&#10;ת&quot;א 41822-03-25 כהן נ' אלון מערכות — דיון קדם משפט 05/11/2026 09:30&#10;החלטה בתיק 6620-07-26: המשיבה תגיש תגובתה תוך 10 ימים"></textarea>
+    <div class="row"><button class="btn" id="parseBtn" type="button">זיהוי מועדים</button></div>
+    <div id="props"></div>
+  </div>`}
+  ${mode==='paste'?'':`<div class="card"><h3>קליטת קובץ אקסל</h3>
+    <p class="muted">בחרו קובץ (xlsx, xls או csv). הגיליון הראשון נקרא. תיק שמספרו כבר קיים יעודכן ולא ישוכפל. מועדים שכבר עברו לא ייקלטו.</p>
+    <input type="file" id="xlsFile" accept=".xlsx,.xls,.csv">
+    <div id="xlsMap">${x?mapUI(x):''}</div>
+  </div>`}</div>`;
+  $('#xlsFile')?.addEventListener('change',e=>readXls(e.target.files[0]));
+  $('#parseBtn')?.addEventListener('click',()=>{S.props=parsePaste($('#paste').value);renderProps()});
+  if(x&&$('#xlsMap'))bindMap();
+  renderProps();
+}
+function mapUI(x){
+  return `${x.sheets.length>1?`<label class="f"><span>גיליון</span><select id="xSheet">${x.sheets.map(n=>`<option ${n===x.sheet?'selected':''}>${esc(n)}</option>`).join('')}</select></label>`:''}<label class="row"><input type="checkbox" id="xClosed" ${x.closed?'checked':''}> <span>אלה <b>תיקים סגורים</b> (ייכנסו לטבלת התיקים הסגורים, בלי מועדים)</span></label><p><b>${x.rows.length}</b> שורות זוהו. התאמת עמודות:</p><div class="grid2">${MAP_FIELDS.map(([k,l])=>`<label class="f"><span>${l}</span><select data-map="${k}"><option value="">—</option>${x.head.map((h,i)=>`<option value="${i}" ${x.map[k]===i?'selected':''}>${esc(h||'עמודה '+(i+1))}</option>`).join('')}</select></label>`).join('')}</div>
+  <div class="row"><button class="btn" id="doImport" type="button" ${S.canWrite?'':'disabled'}>קלוט ${x.rows.length} תיקים</button><span id="impStatus" class="muted"></span></div>`;
+}
+function bindMap(){$('#xSheet')?.addEventListener('change',e=>loadSheet(e.target.value));$('#xClosed')?.addEventListener('change',e=>{S.xls.closed=e.target.checked});document.querySelectorAll('[data-map]').forEach(s=>s.addEventListener('change',()=>{S.xls.map[s.dataset.map]=s.value===''?undefined:+s.value}));$('#doImport').addEventListener('click',importXls)}
+async function readXls(file){
+  if(!file)return;
+  if(!window.XLSX){toast('ספריית האקסל לא נטענה. רעננו את הדף.');return}
+  try{S.wb=XLSX.read(await file.arrayBuffer(),{type:'array'});loadSheet(S.wb.SheetNames[0])}catch(e){toast('הקובץ לא נקרא. ודאו שזה קובץ אקסל או CSV תקין.')}
+}
+function loadSheet(name){
+  const rows=XLSX.utils.sheet_to_json(S.wb.Sheets[name],{header:1,raw:true,defval:''});
+  /* header row: first row with 3+ filled cells that are mostly text */
+  const hi=rows.findIndex(r=>r.filter(c=>String(c).trim()&&isNaN(c)).length>=3);
+  if(hi<0){toast('לא נמצאה שורת כותרות בגיליון');return}
+  const head=rows[hi].map(c=>String(c).trim()),map={};
+  for(const[k,,re]of MAP_FIELDS){const i=head.findIndex((h,j)=>h&&re.test(h)&&!Object.values(map).includes(j));if(i>=0)map[k]=i}
+  S.xls={head,rows:rows.slice(hi+1).filter(r=>r.some(c=>String(c).trim())),map,sheets:S.wb.SheetNames,sheet:name,closed:/סגור/.test(name)};
+  $('#xlsMap').innerHTML=mapUI(S.xls);bindMap();
+}
+async function importXls(){
+  const{rows,map}=S.xls,g=(r,k)=>map[k]===undefined?'':r[map[k]];let nc=0,nt=0,past=0;const both=[];
+  $('#doImport').disabled=true;
+  for(const r of rows){
+    const raw=String(g(r,'number')).trim(),m=raw.match(/(\d{3,6}-\d{2}-\d{2})/)||raw.match(/(\d{2,6}\/\d{2})/);
+    const number=m?m[1]:raw,title=String(g(r,'title')).trim()||(raw.includes(':')?raw.split(':')[1].trim():'');
+    if(!number&&!title&&!String(g(r,'client')).trim())continue;
+    const data={...(S.xls.closed?{status:'סגור',closeReason:String(g(r,'closeNote')).trim().slice(0,200)||'נסגר',closedAt:cellDate(g(r,'closeNote'))||''}:{}),number,fileNo:String(g(r,'fileNo')).trim(),procType:m?raw.slice(0,raw.indexOf(m[1])).trim():'',proc:raw,title,client:String(g(r,'client')).trim(),court:String(g(r,'court')).trim(),judge:String(g(r,'judge')).trim(),owner:String(g(r,'owner')).trim(),side:String(g(r,'side')).trim(),notes:String(g(r,'notes')).trim(),action:String(g(r,'deadlineTitle')).trim()};
+    if(S.xls.closed){const ex=[...S.cases.values()].find(c=>data.number&&c.number===data.number);if(ex&&!isClosed(ex)){both.push(ex.client||ex.number);continue}}
+    const id=await upsertCase(data);nc++;
+    if(S.xls.closed){$('#impStatus').textContent=`${nc} תיקים…`;continue}
+    const hd=cellDate(g(r,'hearing'));
+    if(hd){if(hd>=today()){await saveTask(null,{caseId:id,kind:'hearing',title:'דיון',due:hd,time:cellTime(g(r,'hearingTime'))||cellTime(g(r,'hearing')),assignee:data.owner,source:'אקסל'});nt++}else past++}
+    const dl=cellDate(g(r,'deadline'));
+    if(dl){if(dl>=today()){await saveTask(null,{caseId:id,kind:detectKind(data.action),title:data.action.slice(0,110)||'מועד מהאקסל',due:dl,time:'',assignee:data.owner,source:'אקסל'});nt++}else past++}
+    $('#impStatus').textContent=`${nc} תיקים, ${nt} מועדים…`;
+  }
+  $('#impStatus').textContent=`נקלטו ${nc} תיקים${S.xls.closed?' סגורים':` ו־${nt} מועדים`}.${past?` ${past} מועדים שכבר עברו לא נקלטו.`:''}${both.length?` ${both.length} תיקים מופיעים גם כפתוחים ולכן לא נסגרו: ${both.join(', ')}. אם הם אכן הסתיימו, סגרו אותם מכרטיס התיק.`:''}`;toast('הקליטה הסתיימה');
+}
+function detectKind(s){
+  if(/דיון|ישיבה|קדם|הוכחות|תזכורת|טיעונים לעונש/.test(s))return'hearing';
+  if(/בקשת רשות ערעור|בר"ע|רע"א/.test(s))return'leave';
+  if(/ערעור/.test(s))return'appeal';
+  if(/כתב הגנה/.test(s))return'defense';
+  if(/תשובה לתגובה/.test(s))return'reply';
+  if(/תגוב/.test(s))return'response';
+  if(/תצהיר/.test(s))return'affidavits';
+  if(/גילוי|עיון|שאלונים/.test(s))return'discovery';
+  return'submission';
+}
+function parsePaste(text){
+  const out=[];let cur=null;
+  for(const ln of text.split(/\n+/).map(s=>s.trim()).filter(Boolean)){
+    const cn=ln.match(/(\d{3,6}-\d{2}-\d{2})/);if(cn)cur=cn[1];
+    const dates=[...ln.matchAll(/(\d{1,2})[./](\d{1,2})[./](\d{2,4})/g)].map(m=>{let y=+m[3];if(y<100)y+=2000;return y+'-'+pad(+m[2])+'-'+pad(+m[1])});
+    const tm=ln.match(/\b([01]?\d|2[0-3]):([0-5]\d)\b/);
+    const within=ln.match(/(?:תוך|בתוך)\s*(\d{1,3})\s*ימים/);
+    if(!dates.length&&!within)continue;
+    const kind=detectKind(ln);let due;
+    if(within)due=calcDue(dates[0]||today(),+within[1],true).due;else due=dates[dates.length>1&&kind!=='hearing'?dates.length-1:0];
+    out.push({caseNo:cur||'',due,time:kind==='hearing'&&tm?pad(+tm[1])+':'+tm[2]:'',kind,title:(KINDS[kind].l+' — '+ln.replace(/\s+/g,' ')).slice(0,140),sel:true});
+  }
+  return out;
+}
+function renderProps(){
+  const el=$('#props');if(!el)return;
+  if(!S.props.length){el.innerHTML='';return}
+  el.innerHTML=`<p><b>${S.props.length}</b> מועדים זוהו. בדקו ותקנו לפני ההוספה:</p>`+S.props.map((p,i)=>`<div class="prop">
+    <input type="checkbox" data-pi="${i}" data-pf="sel" ${p.sel?'checked':''} aria-label="לכלול">
+    <input type="text" data-pi="${i}" data-pf="caseNo" value="${esc(p.caseNo)}" placeholder="מס׳ תיק" aria-label="מספר תיק">
+    <input type="text" data-pi="${i}" data-pf="title" value="${esc(p.title)}" aria-label="תיאור">
+    <select data-pi="${i}" data-pf="kind" aria-label="סוג">${Object.entries(KINDS).map(([k,v])=>`<option value="${k}" ${k===p.kind?'selected':''}>${v.l}</option>`).join('')}</select>
+    <input type="date" data-pi="${i}" data-pf="due" value="${esc(p.due)}" aria-label="תאריך">
+  </div>`).join('')+`<div class="row" style="margin-top:10px"><button class="btn" id="addProps" type="button" ${S.canWrite?'':'disabled'}>הוסף את המסומנים</button></div>`;
+  el.querySelectorAll('[data-pi]').forEach(inp=>inp.addEventListener('input',()=>{const p=S.props[inp.dataset.pi];p[inp.dataset.pf]=inp.type==='checkbox'?inp.checked:inp.value}));
+  $('#addProps').addEventListener('click',async()=>{let n=0;for(const p of S.props.filter(p=>p.sel&&p.due)){
+    let c=[...S.cases.values()].find(c=>p.caseNo&&c.number&&c.number.includes(p.caseNo));
+    const cid=c?c.id:await upsertCase({number:p.caseNo,title:'(נקלט מנט המשפט — להשלים פרטים)',client:'',court:'',judge:'',owner:'',notes:''});
+    await saveTask(null,{caseId:cid,kind:p.kind,title:p.title,due:p.due,time:p.time||'',assignee:c?.owner||'',source:'נט המשפט'});n++}
+    S.props=[];$('#paste').value='';renderProps();toast(`נוספו ${n} מועדים`)});
+}
+
+/* ---------- documents: read PDF / Word / text into plain text ---------- */
+const loaded={};
+function loadScript(src){return loaded[src]||(loaded[src]=new Promise((res,rej)=>{const s=document.createElement('script');s.src=src;s.onload=res;s.onerror=()=>{delete loaded[src];rej(new Error('load'))};document.head.appendChild(s)}))}
+const PDFJS='/static/vendor/pdfjs/';
+async function pdfText(buf){
+  await loadScript(PDFJS+'pdf.min.js');await loadScript(PDFJS+'pdf.worker.min.js');
+  window.pdfjsLib.GlobalWorkerOptions.workerSrc=PDFJS+'pdf.worker.min.js';
+  const pdf=await window.pdfjsLib.getDocument({data:buf,cMapUrl:PDFJS+'cmaps/',cMapPacked:true,standardFontDataUrl:PDFJS+'standard_fonts/'}).promise;let out='';
+  /* pdf.js returns pieces in visual left-to-right order; Hebrew lines are rebuilt right-to-left */
+  for(let i=1;i<=pdf.numPages;i++){const tc=await(await pdf.getPage(i)).getTextContent();const lines=[];
+    for(const it of tc.items){if(!it.str||!it.str.trim())continue;const x=it.transform[4],y=it.transform[5],h=Math.abs(it.transform[3])||10;
+      let ln=lines.find(l=>Math.abs(l.y-y)<h*0.5);if(!ln){ln={y,items:[]};lines.push(ln)}ln.items.push({x,s:it.str})}
+    lines.sort((a,b)=>b.y-a.y);
+    out+=lines.map(l=>{const heb=l.items.some(t=>/[\u0590-\u05FF]/.test(t.s));l.items.sort((a,b)=>heb?b.x-a.x:a.x-b.x);return l.items.map(t=>t.s.trim()).join(' ').replace(/\s+/g,' ')}).join('\n')+'\n\n'}
+  return{text:out,pages:pdf.numPages};
+}
+async function fileText(file){
+  const n=file.name.toLowerCase();
+  if(n.endsWith('.pdf'))return pdfText(await file.arrayBuffer());
+  if(n.endsWith('.docx')){await loadScript('/static/vendor/mammoth.browser.min.js');const r=await window.mammoth.extractRawText({arrayBuffer:await file.arrayBuffer()});return{text:r.value,pages:0}}
+  if(n.endsWith('.txt')||n.endsWith('.md'))return{text:await file.text(),pages:0};
+  throw new Error('type');
+}
+function guessDocKind(name){const s=name;for(const k of['פסק דין','פרוטוקול','כתב תביעה','כתב הגנה','כתב תשובה','תשובה לתגובה','תגובה','בקשה','תצהיר','חוות דעת','החלטה'])if(s.includes(k))return k;return'אחר'}
+const MAXCH=100000;
+/* returns saved doc data, or throws with a Hebrew message */
+async function ingest(file,extra){
+  if(file.size>20*1024*1024)throw new Error('הקובץ גדול מ־20MB.');
+  let r;try{r=await fileText(file)}catch(e){throw new Error(e.message==='type'?'אפשר לקלוט PDF, Word (docx) או קובץ טקסט. קובץ doc ישן: שמרו אותו מחדש כ־docx.':'הקובץ לא נקרא. ייתכן שהוא פגום או מוגן בסיסמה.')}
+  const clean=r.text.replace(/[ \t]+\n/g,'\n').replace(/\n{3,}/g,'\n\n').trim();
+  if(clean.length<40*Math.max(1,r.pages))throw new Error('המסמך נראה סרוק (תמונה בלי טקסט). העתיקו את הטקסט ידנית לתיבת "הדבקת טקסט", או בקשו גרסה דיגיטלית.');
+  const data={...extra,name:file.name,text:clean.slice(0,MAXCH),truncated:clean.length>MAXCH,chars:clean.length,pages:r.pages||0,uploadedAt:new Date().toISOString()};
+  try{const a=await uploadFile(file);data.fileId=a.id;data.assetUrl=a.url}catch(e){}
+  return data;
+}
+function dropZone(o,sel,onFiles){const z=o.querySelector(sel);if(!z)return;
+  z.addEventListener('dragover',e=>{e.preventDefault();z.classList.add('over')});z.addEventListener('dragleave',()=>z.classList.remove('over'));
+  z.addEventListener('drop',e=>{e.preventDefault();z.classList.remove('over');onFiles([...e.dataTransfer.files])});
+  z.querySelector('input[type=file]').addEventListener('change',e=>onFiles([...e.target.files]))}
+async function caseDocs(caseId){try{const s=await S.db.collection('docs').where('caseId','==',caseId).get();return s.docs.map(d=>({id:d.id,...d.data()})).sort((a,b)=>(b.docDate||b.uploadedAt||'').localeCompare(a.docDate||a.uploadedAt||''))}catch(e){return[]}}
+async function styleDocs(){try{const s=await S.db.collection('style').get();return s.docs.map(d=>({id:d.id,...d.data()}))}catch(e){return[]}}
+
+/* ---------- sheets (overlays) ---------- */
+function sheet(html,bind){const o=document.createElement('div');o.className='overlay';o.innerHTML=`<div class="sheet" role="dialog" aria-modal="true">${html}</div>`;
+  o.addEventListener('click',e=>{if(e.target===o||e.target.closest('[data-close]'))o.remove()});
+  document.addEventListener('keydown',function k(e){if(e.key==='Escape'){o.remove();document.removeEventListener('keydown',k)}});
+  document.body.appendChild(o);bind&&bind(o);o.querySelector('input,select,button')?.focus();return o}
+function caseForm(c){
+  c=c||{};const v=k=>esc(c[k]||'');
+  sheet(`<h2>${c.id?'עריכת תיק':'תיק חדש'}</h2><form id="cf" class="grid2">
+    <label class="f"><span>לקוח</span><input type="text" name="client" value="${v('client')}" placeholder="שם הלקוח"></label>
+    <label class="f"><span>תיק משרד</span><input type="text" name="fileNo" value="${v('fileNo')}" placeholder="7767/3"></label>
+    <label class="f"><span>סוג הליך</span><input type="text" name="procType" value="${v('procType')}" placeholder='ת"א'></label>
+    <label class="f"><span>מספר הליך בבית המשפט</span><input type="text" name="number" value="${v('number')}" placeholder="12345-01-26"></label>
+    <label class="f"><span>צדדים</span><input type="text" name="title" value="${v('title')}" placeholder="כהן נ' לוי"></label>
+    <label class="f"><span>אנו מייצגים</span><input type="text" name="side" value="${v('side')}" placeholder="נתבע"></label>
+    <label class="f"><span>ערכאה</span><input type="text" name="court" value="${v('court')}" placeholder="שלום ירושלים"></label>
+    <label class="f"><span>שופט/ת</span><input type="text" name="judge" value="${v('judge')}"></label>
+    <label class="f"><span>עו"ד אחראי</span><input type="text" name="owner" value="${v('owner')}" list="ppl"></label>
+    <label class="f"><span>סטטוס</span><select name="status">${['פעיל','ממתין להחלטה','בגישור','מעוכב','סגור'].map(s=>`<option ${c.status===s?'selected':''}>${s}</option>`).join('')}</select></label>
+    <label class="f" style="grid-column:1/-1"><span>פעולה לביצוע</span><input type="text" name="action" value="${v('action')}"></label>
+    <label class="f" style="grid-column:1/-1"><span>היסטוריה והערות</span><textarea name="notes" style="min-height:80px">${v('notes')}</textarea></label>
+    <datalist id="ppl">${people().map(p=>`<option value="${esc(p)}">`).join('')}</datalist>
+    <div class="actions" style="grid-column:1/-1"><button class="btn" type="submit">שמור</button><button class="btn ghost" type="button" data-close>ביטול</button></div></form>`,
+  o=>o.querySelector('#cf').addEventListener('submit',async e=>{e.preventDefault();const d=Object.fromEntries(new FormData(e.target));await saveCase(c.id,d);if(S.admin&&c.id&&d.owner&&d.owner!==c.owner){for(const t of openTasks().filter(x=>x.caseId===c.id&&(!x.assignee||x.assignee===c.owner)))await saveTask(t.id,{assignee:d.owner,assignedBy:S.me?.name||'',assignedAt:new Date().toISOString(),seen:d.owner===S.me?.name})}o.remove();toast('התיק נשמר')}));
+}
+function taskForm(t,caseId){
+  t=t||{caseId,kind:'submission',due:today(),assignee:S.cases.get(caseId)?.owner||''};
+  const p=t.due?plan(t):null;
+  sheet(`<h2>${t.id?'עריכת מועד':'מועד / משימה חדשה'}</h2><form id="tf" class="grid2">
+    <label class="f" style="grid-column:1/-1"><span>תיק</span><select name="caseId" required><option value="">בחרו תיק…</option>${caseOptions(t.caseId)}</select></label>
+    <label class="f"><span>סוג</span><select name="kind" id="tfKind">${Object.entries(KINDS).map(([k,v])=>`<option value="${k}" ${k===t.kind?'selected':''}>${v.l}</option>`).join('')}</select></label>
+    <label class="f"><span>תיאור</span><input type="text" name="title" value="${esc(t.title||'')}"></label>
+    <label class="f"><span>מועד אחרון / תאריך הדיון</span><input type="date" name="due" value="${esc(t.due||'')}" required></label>
+    <label class="f"><span>שעה (לדיון)</span><input type="time" name="time" value="${esc(t.time||'')}"></label>
+    <label class="f"><span>ימי עבודה שהמסמך דורש</span><input type="number" name="effort" min="0" max="30" value="${esc(t.effort??'')}" placeholder="ברירת מחדל: ${EFFORT[t.kind]??1}"></label>
+    <label class="f"><span>להתחיל לעבוד מ־ (לא חובה)</span><input type="date" name="workFrom" value="${esc(t.workFrom||'')}"></label>
+    <label class="f"><span>אחראי</span>${S.admin?`<select name="assignee"><option value="">לא שויך</option>${(S.people||[]).map(p=>`<option ${p===t.assignee?'selected':''}>${esc(p)}</option>`).join('')}</select>`:`<input type="text" name="assignee" value="${esc(t.assignee||'')}" readonly title="רק מנהל משייך משימות">`}</label>
+    <label class="f"><span>הערה</span><input type="text" name="note" value="${esc(t.note||'')}"></label>
+    <p class="note" style="grid-column:1/-1">${p&&p.e?`לפי ההגדרות: לעבוד על זה מ־${fmt(p.start)} עד ${fmt(p.end)}, ולהגיש עד ${fmt(t.due)}. יום אחד לפני המועד נשמר לבדיקה ולהגשה.`:'משימה בלי ימי עבודה תופיע רק ביום המועד.'}</p>
+    <datalist id="ppl2">${people().map(p=>`<option value="${esc(p)}">`).join('')}</datalist>
+    <div class="actions" style="grid-column:1/-1"><button class="btn" type="submit">שמור</button><button class="btn ghost" type="button" data-close>ביטול</button>${t.id?'<button class="btn danger" type="button" id="delT">מחק מועד</button>':''}</div></form>`,
+  o=>{o.querySelector('#tf').addEventListener('submit',async e=>{e.preventDefault();const d=Object.fromEntries(new FormData(e.target));if(d.effort==='')d.effort=null;else d.effort=+d.effort;await saveTask(t.id,{...d,source:t.source||'ידני',done:!!t.done});o.remove();toast('המועד נשמר')});
+    o.querySelector('#delT')?.addEventListener('click',async ev=>{const b=ev.target;if(b.dataset.sure){await S.db.doc('tasks/'+t.id).delete();o.remove();toast('המועד נמחק')}else{b.dataset.sure=1;b.textContent='לחצו שוב לאישור המחיקה'}})});
+}
+function docListHTML(docs){return docs.length?`<ul class="docs">${docs.map(d=>`<li><span class="chip">${esc(d.kind||'אחר')}</span><span class="nm">${esc(d.name)}</span><span class="muted">${(d.chars||0).toLocaleString('he-IL')} תווים${d.truncated?' (נשמר חלקית)':''}</span>${d.assetUrl?`<a class="btn ghost sm" href="${esc(d.assetUrl)}" target="_blank" rel="noopener">פתח</a>`:''}<button class="btn ghost sm" type="button" data-act="viewDoc" data-id="${esc(d.id)}">הצג טקסט</button>${S.canWrite?`<button class="btn danger sm adm-only" type="button" data-act="delDoc" data-id="${esc(d.id)}">מחק</button>`:''}</li>`).join('')}</ul>`:'<p class="muted">עדיין אין מסמכים בתיק. הוסיפו החלטות, כתבי טענות ופרוטוקולים, והטיוטות ייכתבו על בסיסם.</p>'}
+async function caseSheet(id){
+  const c=S.cases.get(id);if(!c)return;
+  const ts=[...S.tasks.values()].filter(t=>t.caseId===id).sort((a,b)=>(a.done-b.done)||a.due.localeCompare(b.due));
+  const o=sheet(`<div class="row" style="justify-content:space-between"><h2>${esc(caseLabel(c))}</h2><span class="chip">${esc(c.status||'פעיל')}</span></div>
+    <dl class="kv"><dt>תיק משרד</dt><dd>${esc(c.fileNo)}</dd><dt>הליך</dt><dd>${esc(c.procType)} ${esc(c.number)}</dd><dt>צדדים</dt><dd>${esc(c.title)}</dd><dt>אנו מייצגים</dt><dd>${esc(c.side)}</dd><dt>ערכאה</dt><dd>${esc(c.court)}</dd><dt>אחראי</dt><dd>${esc(c.owner)}</dd>${c.action?`<dt>פעולה לביצוע</dt><dd>${esc(c.action)}</dd>`:''}${isClosed(c)?`<dt>נסגר</dt><dd>${fmt(c.closedAt)} · ${esc(c.closeReason||'')}${c.judgmentDate?' · פס"ד '+fmt(c.judgmentDate):''}</dd>`:''}</dl>
+    <h3>סטטוס אחרון</h3>${(()=>{const ls=lastStatus(c);return ls?`<p style="margin:0"><b>${esc(ls.text)}</b>${ls.date?` <span class="muted">(${fmt(ls.date)}${ls.by?', '+esc(ls.by):''})</span>`:''}</p>`:'<p class="muted" style="margin:0">אין עדיין.</p>'})()}<details><summary class="muted" style="cursor:pointer">כל ההיסטוריה</summary>${logHTML(c)}</details>
+    <div class="actions">${S.canWrite?`<button class="btn" type="button" data-act="newTask" data-id="${esc(id)}">+ מועד לתיק</button><button class="btn ghost" type="button" data-act="status" data-id="${esc(id)}">עדכון סטטוס</button><button class="btn ghost" type="button" data-act="editCase" data-id="${esc(id)}">ערוך פרטים</button>${isClosed(c)?`<button class="btn ghost" type="button" data-act="reopen" data-id="${esc(id)}">פתח מחדש</button>`:`<button class="btn danger" type="button" data-act="closeCase" data-id="${esc(id)}">סגירת תיק</button>`}`:''}<button class="btn ghost" type="button" data-act="draftCase" data-id="${esc(id)}">✎ נסח מסמך</button><a class="btn ghost" href="https://secure.court.gov.il/Ngcs.Web.Secured/LawyerHomePage.aspx" target="_blank" rel="noopener">נט המשפט ↗</a><button class="btn ghost" type="button" data-close>סגור</button></div>
+    <h3>מועדים</h3>${ts.length?`<ul class="tasks">${ts.map(t=>taskRow(t,{showCase:false,mode:'upcoming'})).join('')}</ul>`:'<div class="empty">אין מועדים בתיק</div>'}
+    <h3>מסמכי התיק</h3><div id="docList"><p class="muted">טוען…</p></div>
+    ${S.canWrite?`<div class="drop" id="docDrop"><p>גררו לכאן קבצי PDF או Word, או <label class="btn ghost sm">בחרו קבצים<input type="file" multiple accept=".pdf,.docx,.txt" hidden></label></p>
+      <div class="row" style="justify-content:center"><label class="f" style="flex-direction:row;align-items:center;gap:6px"><span>סוג המסמך:</span><select id="docKind"><option value="">לפי שם הקובץ</option>${DOC_KINDS.map(k=>`<option>${k}</option>`).join('')}</select></label><label class="f" style="flex-direction:row;align-items:center;gap:6px"><span>תאריך המסמך:</span><input type="date" id="docDate" style="width:auto"></label></div>
+      <p class="note" id="docStat" aria-live="polite">הטקסט נקרא מתוך הקובץ ונשמר בתיק. מסמך סרוק (תמונה) לא ייקרא.</p></div>
+      <details><summary class="muted" style="cursor:pointer">או הדביקו טקסט של מסמך</summary><div class="grid2" style="margin-top:8px"><label class="f"><span>שם המסמך</span><input type="text" id="pName" placeholder="החלטה מיום 20.10.26"></label><label class="f"><span>סוג</span><select id="pKind">${DOC_KINDS.map(k=>`<option>${k}</option>`).join('')}</select></label><label class="f" style="grid-column:1/-1"><span>הטקסט</span><textarea id="pText"></textarea></label></div><button class="btn sm" id="pSave" type="button">שמור מסמך</button></details>`:''}`,
+  o=>{
+    const st=o.querySelector('#docStat');
+    dropZone(o,'#docDrop',async files=>{let ok=0;for(const f of files){st.textContent=`קורא את ${f.name}…`;
+      try{const data=await ingest(f,{caseId:id,kind:o.querySelector('#docKind').value||guessDocKind(f.name),docDate:o.querySelector('#docDate').value||''});await S.db.collection('docs').doc().set(data);ok++}catch(e){toast(f.name+': '+e.message)}}
+      st.textContent=ok?`נשמרו ${ok} מסמכים.`:'לא נשמרו מסמכים.';refreshDocs()});
+    o.querySelector('#pSave')?.addEventListener('click',async()=>{const tx=o.querySelector('#pText').value.trim();if(tx.length<20){toast('הדביקו את טקסט המסמך');return}
+      try{await S.db.collection('docs').doc().set({caseId:id,name:o.querySelector('#pName').value.trim()||'מסמך מודבק',kind:o.querySelector('#pKind').value,text:tx.slice(0,MAXCH),truncated:tx.length>MAXCH,chars:tx.length,pages:0,uploadedAt:new Date().toISOString()});o.querySelector('#pText').value='';toast('המסמך נשמר');refreshDocs()}catch(e){writeErr(e)}});
+    async function refreshDocs(){const docs=await caseDocs(id);o._docs=docs;const el=o.querySelector('#docList');if(el)el.innerHTML=docListHTML(docs)}
+    o._refresh=refreshDocs;refreshDocs();
+  });
+}
+
+/* ---------- drafting ---------- */
+const DOCS=['כתב הגנה','כתב תשובה','תגובה לבקשה','תשובה לתגובה','הודעת עדכון לבית המשפט','בקשה להארכת מועד','בקשה למתן החלטה','בקשה לעיון בתיק','תצהיר עדות ראשית','תצהיר גילוי מסמכים','שאלון','הודעת ערעור','בקשת רשות ערעור','בקשה לביטול פסק דין','סיכומים','הכנה לדיון: ראשי פרקים לטיעון','מכתב ללקוח על מצב התיק'];
+function guessDoc(t,c){const s=(t?.title||'')+' '+(c?.action||'');
+  if(t?.kind==='hearing')return DOCS[15];if(t?.kind==='defense'||/כתב הגנה/.test(s))return DOCS[0];if(/כתב תשובה/.test(s))return DOCS[1];
+  if(t?.kind==='reply')return DOCS[3];if(t?.kind==='response'||/תגוב/.test(s))return DOCS[2];if(/מתן החלטה/.test(s))return DOCS[6];if(/עיון בתיק/.test(s))return DOCS[7];
+  if(t?.kind==='affidavits'||/תצהיר/.test(s))return DOCS[8];if(t?.kind==='discovery'||/שאלון|גילוי/.test(s))return DOCS[9];if(t?.kind==='appeal')return DOCS[11];if(t?.kind==='leave')return DOCS[12];
+  if(t?.kind==='setaside')return DOCS[13];if(/אורכה|ארכה/.test(s))return DOCS[5];return DOCS[4]}
+function clip(list,budget,label){let out='',left=budget;for(const d of list){if(left<500)break;const t=d.text.slice(0,left);out+=`\n=== ${label(d)} ===\n${t}${t.length<d.text.length?'\n[…המסמך קוצר…]':''}\n`;left-=t.length}return out}
+function draftPrompt(doc,c,t,facts,docs,styles){
+  const L=(k,v)=>v?`${k}: ${v}\n`:'';
+  return `אתה עורך דין ישראלי מנוסה בליטיגציה. נסח טיוטה מלאה של המסמך: "${doc}", בעברית משפטית תקנית, לפי הנוהג בבתי המשפט בישראל ולפי תקנות סדר הדין האזרחי, התשע"ט-2018 (או הדין החל על סוג ההליך, למשל ענייני משפחה, ירושה או פלילי).
+
+${S.settings?.signature?`פרטי המשרד לחתימה ולכותרת: ${S.settings.signature}\n\n`:''}פרטי התיק:
+${L('סוג הליך ומספר',[c?.procType,c?.number].filter(Boolean).join(' '))}${L('פרטי ההליך כפי שנרשמו',c?.proc)}${L('צדדים',c?.title)}${L('הלקוח שלנו',c?.client)}${L('אנו מייצגים את',c?.side)}${L('ערכאה',c?.court)}${L('שופט/ת',c?.judge)}${L('היסטוריה וסטטוס',c?.notes)}${L('פעולה לביצוע',c?.action)}
+${t?`המשימה בלוח: ${t.title||''} — מועד: ${t.due?fmt(t.due):''}${t.note?' ('+t.note+')':''}\n`:''}
+הנחיות וחומר מעורך הדין:
+${facts||'(לא נוספו הנחיות)'}
+${docs?`\nמסמכי התיק (מהחדש לישן). קרא אותם בעיון ובסס עליהם את העובדות, את המענה לטענות ואת ההפניות לסעיפים:\n${docs}`:'\n(אין מסמכים שמורים בתיק.)'}
+${styles?`\nדוגמאות למסמכים שהמשרד כתב בעבר. למד מהן את סגנון המשרד: מבנה, כותרות, פתיחים, אופן המענה לטענות, ניסוחים חוזרים, בקשות הסעד ובלוק החתימה. אל תעתיק מהן עובדות, שמות או מספרים:\n${styles}`:''}
+
+כללים:
+1. מבנה מסמך בית משפט מלא: שם בית המשפט ומספר ההליך, פרטי הצדדים ובאי כוחם, כותרת המסמך, פתיח, סעיפים ממוספרים עם כותרות משנה, סיום ובקשת הסעד, שורת תאריך וחתימת בא כוח. במכתב ללקוח או בהכנה לדיון התאם את המבנה. אם יש דוגמאות סגנון, המבנה שלהן גובר.
+2. אל תמציא עובדות, תאריכים, סכומים, שמות או מספרים שאינם בחומר. מידע חסר כתוב בסוגריים מרובעים, למשל [להשלים: מועד המצאת כתב התביעה].
+3. אל תמציא פסקי דין או מראי מקום. אסמכתא שאינך בטוח בה במדויק סמן [לאמת אסמכתא].
+4. בכתב הגנה, בתגובה ובתשובה: התייחס לכל טענה של הצד שכנגד שמופיעה במסמכים, לפי סדרה, והבחן בין הכחשה, הודאה וטענה חלופית. הפנה לסעיפים במסמכים.
+5. טקסט רגיל בלבד, ללא Markdown (בלי #, כוכביות או טבלאות), כדי שיודבק ישירות ל-Word.
+6. בסוף, אחרי שורת קווים, כתוב "נקודות לבדיקת עורך הדין": עד 8 שורות קצרות על מה שחסר, מה צריך לאמת, ומה הסיכונים.`;
+}
+async function draftSheet(taskId,caseId){
+  const t=taskId?S.tasks.get(taskId):null,c=S.cases.get(caseId||t?.caseId);if(!c)return;
+  const key=taskId||('case-'+c.id);let saved=null;
+  const [docs,styles]=await Promise.all([caseDocs(c.id),styleDocs()]);
+  try{const d=await S.db.doc('drafts/'+key).get();if(d.exists)saved=d.data()}catch(e){}
+  const doc0=saved?.doc||guessDoc(t,c);
+  sheet(`<h2>טיוטה — ${esc(caseLabel(c))}</h2>
+    <div class="muted">${esc([c.procType,c.number].filter(Boolean).join(' '))}${t?' · '+esc(t.title||'')+' · '+fmt(t.due):''}</div>
+    <div class="grid2"><label class="f"><span>סוג המסמך</span><select id="dDoc">${DOCS.map(d=>`<option ${d===doc0?'selected':''}>${esc(d)}</option>`).join('')}<option value="__o">אחר…</option></select></label>
+    <label class="f" id="dOtherL" hidden><span>שם המסמך</span><input type="text" id="dOther"></label></div>
+    <div><b>מסמכי התיק שייקראו</b> <span class="muted">(${docs.length})</span>
+      ${docs.length?`<div style="display:flex;flex-direction:column;gap:4px;margin-top:6px">${docs.map(d=>`<label class="row"><input type="checkbox" class="dUse" value="${esc(d.id)}" checked> <span class="chip">${esc(d.kind)}</span> ${esc(d.name)}</label>`).join('')}</div>`:`<p class="note">אין מסמכים בתיק. אפשר להוסיף אותם בכרטיס התיק ("מסמכי התיק"), או להדביק את החומר בתיבה למטה.</p>`}
+      <p class="note">${styles.length?`הטיוטה תיכתב בסגנון המשרד לפי ${styles.length} מסמכי דוגמה.`:'עדיין אין מסמכי דוגמה בלשונית "סגנון המשרד". הוספת כמה כתבי טענות שלכם תלמד את הטיוטות את הסגנון שלכם.'}</p></div>
+    <label class="f"><span>הנחיות שלך: קו הטיעון, עובדות שאינן במסמכים, מה חשוב להדגיש</span><textarea id="dFacts" placeholder="למשל: לטעון להתיישנות. הלקוח מכחיש שקיבל את ההודעה מיום 3.5. לבקש הוצאות.">${esc(saved?.facts||'')}</textarea></label>
+    <div class="card" style="background:var(--soon-bg);border:0"><b>איך מנסחים</b><ol style="margin:4px 0 0;padding-inline-start:20px"><li>לחצו <b>הכן חבילה ל-Claude</b>. כל פרטי התיק, המסמכים שסימנתם ודוגמאות הסגנון מועתקים.</li><li>לחצו <b>פתח את Claude</b>, הדביקו (Ctrl+V) ושלחו.</li><li>העתיקו את הטיוטה ש-Claude כתב והדביקו אותה בתיבה למטה. לחצו "שמור טיוטה בתיק".</li></ol>
+    <div class="actions" style="margin-top:8px"><button class="btn" id="dGo" type="button">הכן חבילה ל-Claude</button><a class="btn ghost" href="${esc(S.settings.claudeProjectUrl||'https://claude.ai/new')}" target="_blank" rel="noopener">פתח את Claude ↗</a><button class="btn ghost" id="dDl" type="button">הורד כקובץ</button></div><p class="muted" id="dStat" aria-live="polite" style="margin:6px 0 0"></p></div>
+    <textarea class="draft" id="dOut" aria-label="הטיוטה" placeholder="הדביקו כאן את הטיוטה שקיבלתם מ-Claude. אפשר לערוך אותה לפני ההעתקה ל-Word.">${esc(saved?.text||'')}</textarea>
+    <p class="note">טיוטה בלבד. עורך הדין האחראי בודק כל עובדה, מועד ואסמכתא לפני הגשה. שדות בסוגריים מרובעים [ ] דורשים השלמה.</p>
+    <div class="actions"><button class="btn" id="dCopy" type="button">העתק להדבקה ב-Word</button>${S.canWrite?'<button class="btn ghost" id="dSave" type="button">שמור טיוטה בתיק</button><button class="btn ghost" id="dStyle" type="button" title="אחרי שעורך הדין תיקן את הטיוטה">הוסף לדוגמאות הסגנון</button>':''}<button class="btn ghost" type="button" data-close>סגור</button></div>`,
+  o=>{
+    const $o=s=>o.querySelector(s);let ctl=null;
+    $o('#dDoc').addEventListener('change',()=>{$o('#dOtherL').hidden=$o('#dDoc').value!=='__o'});
+    const docName=()=>$o('#dDoc').value==='__o'?($o('#dOther').value.trim()||'מסמך לבית המשפט'):$o('#dDoc').value;
+    const build=()=>{const use=new Set([...o.querySelectorAll('.dUse:checked')].map(i=>i.value)),dn=docName();
+      const sty=[...styles.filter(s=>s.docType===dn),...styles.filter(s=>s.docType!==dn)].slice(0,3);
+      return draftPrompt(dn,c,t,$o('#dFacts').value.trim().slice(0,15000),clip(docs.filter(d=>use.has(d.id)),150000,d=>`${d.kind}: ${d.name}${d.docDate?' ('+fmt(d.docDate)+')':''}`),clip(sty,30000,s=>`דוגמה — ${s.docType||''}: ${s.name}`))};
+    $o('#dGo').addEventListener('click',async()=>{const p=build(),ok=await copyText(p);
+      $o('#dStat').textContent=ok?`החבילה הועתקה (${p.length.toLocaleString('he-IL')} תווים). עכשיו פתחו את Claude, הדביקו ושלחו.`:'ההעתקה לא הצליחה. לחצו "הורד כקובץ" וצרפו את הקובץ בשיחה עם Claude.'});
+    $o('#dDl').addEventListener('click',()=>downloadText(build(),`חבילה לטיוטה - ${caseLabel(c)} - ${docName()}.txt`));
+    $o('#dCopy').addEventListener('click',async()=>{const ta=$o('#dOut');if(await copyText(ta.value))toast('הטיוטה הועתקה — הדביקו ב-Word');else{ta.focus();ta.select();toast('הטקסט סומן — לחצו Ctrl+C')}});
+    $o('#dSave')?.addEventListener('click',async()=>{try{await S.db.doc('drafts/'+key).set({caseId:c.id,taskId:taskId||'',doc:docName(),facts:$o('#dFacts').value.slice(0,15000),text:$o('#dOut').value.slice(0,MAXCH),savedAt:new Date().toISOString()});toast('הטיוטה נשמרה בתיק')}catch(e){writeErr(e)}});
+    $o('#dStyle')?.addEventListener('click',async ev=>{const b=ev.target,tx=$o('#dOut').value.trim();if(tx.length<200){toast('אין טיוטה לשמור');return}
+      if(!b.dataset.sure){b.dataset.sure=1;b.textContent='רק אחרי תיקון של עו"ד — לחצו שוב לאישור';return}
+      try{await S.db.collection('style').doc().set({name:`${docName()} — ${caseLabel(c)}`,docType:docName(),text:tx.slice(0,MAXCH),chars:tx.length,uploadedAt:new Date().toISOString()});b.textContent='נוסף לדוגמאות';b.disabled=true;toast('נוסף לדוגמאות הסגנון')}catch(e){writeErr(e)}});
+  });
+}
+async function renderStyle(){
+  $V().innerHTML=`<div class="cols"><div class="card"><h3>לימוד סגנון המשרד</h3>
+    <p>העלו כאן כתבי טענות שהמשרד כתב והגיש בעבר: כתבי הגנה, תגובות, הודעות עדכון, סיכומים. בכל טיוטה חדשה המערכת קוראת עד שלוש דוגמאות, ומעדיפה דוגמה מאותו סוג מסמך. ממנה היא לומדת את המבנה, הפתיחים, אופן המענה לטענות, בקשות הסעד והחתימה.</p>
+    <p class="note">מספיקות 2–3 דוגמאות טובות מכל סוג. עדיף מסמכים שהוגשו בפועל ולא טיוטות. עובדות ושמות מהדוגמאות לא מועתקים לטיוטה.</p>
+    ${S.canWrite?`<label class="f"><span>סוג המסמך שמעלים</span><select id="sType">${DOCS.map(d=>`<option>${esc(d)}</option>`).join('')}</select></label>
+    <div class="drop" id="sDrop"><p>גררו לכאן קבצי PDF או Word, או <label class="btn ghost sm">בחרו קבצים<input type="file" multiple accept=".pdf,.docx,.txt" hidden></label></p><p class="note" id="sStat" aria-live="polite"></p></div>`:''}
+  </div><div class="card"><h3>הדוגמאות השמורות</h3><div id="sList"><p class="muted">טוען…</p></div></div></div>`;
+  const list=async()=>{const s=await styleDocs();$('#sList')&&($('#sList').innerHTML=s.length?`<ul class="docs">${s.map(d=>`<li><span class="chip">${esc(d.docType||'')}</span><span class="nm">${esc(d.name)}</span>${S.canWrite?`<button class="btn danger sm adm-only" type="button" data-act="delStyle" data-id="${esc(d.id)}">מחק</button>`:''}</li>`).join('')}</ul>`:'<p class="muted">עדיין אין דוגמאות.</p>')};
+  S._styleList=list;list();
+  dropZone(document,'#sDrop',async files=>{const st=$('#sStat');let ok=0;for(const f of files){st.textContent=`קורא את ${f.name}…`;
+    try{const d=await ingest(f,{docType:$('#sType').value});delete d.caseId;await S.db.collection('style').doc().set(d);ok++}catch(e){toast(f.name+': '+e.message)}}
+    st.textContent=ok?`נוספו ${ok} דוגמאות.`:'';list()});
+}
+function renderHelp(){
+  $V().innerHTML=`<div class="cols help">
+  <div class="card"><h3>איך מתחילים את הבוקר</h3><ol>
+    <li>פתחו את <b>הבוקר שלי</b>. למעלה מופיע סיכום של מה שעל השולחן.</li>
+    <li><b>באיחור</b>: מועדים שעברו ולא סומנו. בדקו אם הוגשו, ולחצו "✓ סיימתי".</li>
+    <li><b>על מה לעבוד עכשיו</b>: מסמכים שחלון העבודה שלהם פתוח. הפס הקטן מראה באיזה יום עבודה אתם, מתוך כמה.</li>
+    <li><b>בקרוב</b>: מה מתחיל בימים הקרובים ומתי.</li>
+    <li>לשונית <b>יומן</b> מציגה שלושה שבועות קדימה: דיונים, מועדים וימי עבודה.</li></ol></div>
+  <div class="card"><h3>איך המערכת מתכננת את העבודה</h3>
+    <p>לכל סוג מסמך יש מספר ימי עבודה מוגדר מראש: כתב הגנה 5, ערעור 6, בר"ע 4, תצהירים 5, הליכים מקדמיים 3, תגובה 2, תשובה לתגובה והודעה 1, הכנה לדיון 2.</p>
+    <p>המערכת סופרת אחורה מהמועד בימי עבודה (ראשון עד חמישי). יום אחד לפני המועד נשאר לבדיקה ולהגשה. דוגמה: כתב הגנה שמועדו ביום חמישי בשבוע הבא יופיע מיום חמישי השבוע.</p>
+    <p>אפשר לשנות לכל משימה את מספר הימים או את יום ההתחלה: לחצו על שם המשימה.</p></div>
+  <div class="card"><h3>טיוטת כתב טענות</h3><ol>
+    <li>בכרטיס התיק, תחת <b>מסמכי התיק</b>, העלו את ההחלטות, כתבי הטענות והפרוטוקולים (PDF או Word).</li>
+    <li>לחצו <b>✎ טיוטה</b> ליד המשימה. סוג המסמך נבחר לבד, ואפשר לשנות.</li>
+    <li>סמנו אילו מסמכים לקרוא, וכתבו הנחיות: קו הטיעון ומה להדגיש.</li>
+    <li>לחצו <b>הכן חבילה ל-Claude</b> ואז <b>פתח את Claude</b>. הדביקו ושלחו.</li>
+    <li>העתיקו את התשובה, הדביקו בתיבת הטיוטה ולחצו <b>שמור טיוטה בתיק</b>. משם: <b>העתק להדבקה ב-Word</b>.</li>
+    <li>אחרי שעורך הדין תיקן טיוטה טובה, לחצו <b>הוסף לדוגמאות הסגנון</b>. כך הטיוטות הבאות ילמדו מהסגנון שלכם.</li></ol>
+    <p class="note">שדות בסוגריים מרובעים [ ] דורשים השלמה. בסוף כל טיוטה יש רשימת נקודות לבדיקה. זו טיוטה בלבד, ועורך הדין בודק לפני הגשה.</p></div>
+  <div class="card"><h3>עדכון מנט המשפט</h3><ol>
+    <li>בלשונית <b>נט המשפט</b> גררו את הכפתור "שמור מנט המשפט" לסרגל הסימניות (פעם אחת בכל מחשב).</li>
+    <li>היכנסו לנט המשפט עם הכרטיס החכם והקוד, כרגיל.</li>
+    <li>בכל עמוד חשוב (היומן, רשימת החלטות, תיק) לחצו על הכפתור בסרגל הסימניות.</li>
+    <li>בלשונית <b>נט המשפט</b> לחצו "בדוק ושייך": שייכו מסמכים לתיקים, ואשרו את המועדים שזוהו.</li></ol></div>
+  <div class="card"><h3>משתמשים וגיבוי</h3><p>בכל מחשב בוחרים פעם אחת "מי עובד/ת על המחשב הזה". את רשימת השמות ואת קוד המשרד מנהלים ב<b>הגדרות</b>.</p><p class="note">כל הנתונים נשמרים במחשב המשרד, בתיקייה C:\LawBoard\data. גיבוי יומי נשמר אוטומטית בתיקייה C:\LawBoard\data\backups. מומלץ להעתיק את התיקייה data פעם בשבוע לכונן חיצוני.</p></div>
+  </div>`;
+}
+
+/* ---------- office server: storage, files, login ---------- */
+const newId=()=>Date.now().toString(36)+Math.random().toString(36).slice(2,10);
+async function api(method,url,body){
+  const h={'X-User':encodeURIComponent(S.me?.name||'')};if(body!==undefined)h['Content-Type']='application/json';
+  const r=await fetch(url,{method,credentials:'same-origin',headers:h,body:body!==undefined?JSON.stringify(body):undefined});
+  if(r.status===401){showUnlock();throw{code:'auth'}}
+  if(r.status===409){showSetup();throw{code:'auth'}}
+  if(!r.ok){let m='';try{m=(await r.json()).error}catch(e){}throw{code:r.status===413?'quota_exceeded':r.status===403?'forbidden':'unavailable',message:m}}
+  return r.json();
+}
+/* same shape the board already uses: collection().doc().get/set/update/delete, where().get(), onSnapshot() */
+function makeDB(){
+  const subs={};
+  const snapOf=rows=>({docs:rows.map(r=>{const{id,...d}=r;return{id,exists:true,data:()=>d}})});
+  const refresh=async col=>{const rows=await api('GET','/api/c/'+col);(subs[col]||[]).forEach(f=>f(snapOf(rows)))};
+  const ref=(col,id)=>{const u=`/api/c/${col}/${encodeURIComponent(id)}`;return{id,
+    get:async()=>{const r=await api('GET',u);return{id,exists:r.exists,data:()=>r.data}},
+    set:async d=>{await api('PUT',u,d);if(subs[col])refresh(col)},
+    update:async d=>{await api('PATCH',u,d);if(subs[col])refresh(col)},
+    delete:async()=>{await api('DELETE',u);if(subs[col])refresh(col)}}};
+  const coll=col=>({doc:id=>ref(col,id||newId()),
+    get:async()=>snapOf(await api('GET','/api/c/'+col)),
+    where:(f,op,v)=>({get:async()=>snapOf(await api('GET',`/api/c/${col}?f=${encodeURIComponent(f)}&v=${encodeURIComponent(v)}`))}),
+    onSnapshot:(fn,err)=>{(subs[col]=subs[col]||[]).push(fn);refresh(col).catch(err);setInterval(()=>{if(!document.hidden)refresh(col).catch(()=>{})},15000);return()=>{}}});
+  return{collection:coll,doc:path=>{const[c,i]=path.split('/');return ref(c,i)},refresh};
+}
+async function uploadFile(file){
+  const r=await fetch('/api/files?name='+encodeURIComponent(file.name),{method:'POST',credentials:'same-origin',headers:{'Content-Type':file.type||'application/octet-stream'},body:file});
+  if(!r.ok)throw new Error('upload');return r.json();
+}
+async function copyText(text){
+  try{if(navigator.clipboard&&window.isSecureContext){await navigator.clipboard.writeText(text);return true}}catch(e){}
+  const ta=document.createElement('textarea');ta.value=text;ta.style.position='fixed';ta.style.opacity='0';document.body.appendChild(ta);ta.select();
+  let ok=false;try{ok=document.execCommand('copy')}catch(e){}ta.remove();return ok;
+}
+function downloadText(text,name){const a=document.createElement('a');a.href=URL.createObjectURL(new Blob([text],{type:'text/plain;charset=utf-8'}));a.download=name.replace(/[\\/:*?"<>|]/g,'_');document.body.appendChild(a);a.click();setTimeout(()=>{URL.revokeObjectURL(a.href);a.remove()},1000)}
+/* ---------- Net HaMishpat inbox (pages saved with the bookmark button) ---------- */
+function bookmarkletCode(){
+  const O=location.origin;
+  return `(async()=>{const O=${JSON.stringify(O)};const w=window.open(O+'/capture-receive','nh_capture','width=560,height=680');if(!w){alert('הדפדפן חסם את החלון. אפשרו חלונות קופצים לאתר נט המשפט ונסו שוב.');return}
+let ready=false,sent=false,payload=null;const trySend=()=>{if(ready&&payload&&!sent){sent=true;w.postMessage(payload,O)}};
+addEventListener('message',e=>{if(e.source===w&&e.data==='nh-ready'){ready=true;trySend()}});
+const docs=[document];document.querySelectorAll('iframe,frame').forEach(f=>{try{if(f.contentDocument)docs.push(f.contentDocument)}catch(e){}});
+const text=docs.map(d=>d.body?d.body.innerText:'').join('\\n\\n').slice(0,400000);
+const links=[];docs.forEach(d=>d.querySelectorAll('a[href]').forEach(a=>{if(/^https?:/.test(a.href))links.push({href:a.href,text:(a.innerText||a.title||'').trim().slice(0,200)})}));
+const cand=links.filter(l=>{try{return new URL(l.href).origin===location.origin&&/\\.pdf|document|download|file|viewer|getfile|מסמך|החלטה/i.test(l.href+' '+l.text)}catch(e){return false}}).slice(0,40);
+const files=[];for(const l of cand){try{const r=await fetch(l.href,{credentials:'include'});const ct=r.headers.get('content-type')||'';if(/pdf|msword|officedocument|octet-stream/i.test(ct)){const b=await r.blob();if(b.size>500&&b.size<25e6)files.push({name:(l.text||'מסמך').replace(/[\\\\/:*?"<>|]/g,' ').slice(0,90)+(/pdf/i.test(ct)?'.pdf':/word|officedocument/i.test(ct)?'.docx':''),type:ct,blob:b,href:l.href})}}catch(e){}}
+payload={url:location.href,title:document.title,text,links:links.slice(0,600),files};trySend();try{w.postMessage('nh-ping',O)}catch(e){}})()`;
+}
+function caseByNumber(no){return [...S.cases.values()].find(c=>c.number&&no&&(c.number===no||c.number.includes(no)||no.includes(c.number)))}
+function guessCaseForText(s){const m=[...String(s||'').matchAll(/(\d{3,6}-\d{2}-\d{2})/g)].map(x=>x[1]);for(const n of m){const c=caseByNumber(n);if(c)return c}return null}
+async function renderNH(){
+  const href='javascript:'+encodeURIComponent(bookmarkletCode());
+  $V().innerHTML=`<div class="cols">
+  <div class="card"><h3>שמירת עמודים מנט המשפט</h3>
+    <ol style="margin:0;padding-inline-start:20px;display:flex;flex-direction:column;gap:6px">
+      <li>הכפתור הזה צריך להיות בסרגל הסימניות של הדפדפן. גררו אותו לשם פעם אחת (אם הסרגל מוסתר: Ctrl+Shift+B):<br><a class="btn" href="${href}" onclick="event.preventDefault();toast('גררו את הכפתור לסרגל הסימניות, אל תלחצו עליו כאן')" style="margin-top:6px">שמור מנט המשפט</a></li>
+      <li>היכנסו לנט המשפט עם הכרטיס החכם, כרגיל.</li>
+      <li>פתחו עמוד: היומן, רשימת ההחלטות, או תיק מסוים. לחצו על <b>שמור מנט המשפט</b> בסרגל הסימניות.</li>
+      <li>נפתח חלון קטן שמאשר את השמירה. העמוד והמסמכים המצורפים אליו מופיעים כאן, לבדיקה ולשיוך לתיקים.</li></ol>
+    <p class="note">הכפתור קורא רק את מה שמוצג לכם על המסך, בחשבון שלכם. הוא לא מגיש ולא משנה דבר בנט המשפט. אם מסמכים לא נשמרו אוטומטית, הורידו אותם מנט המשפט וגררו אותם לכרטיס התיק.</p></div>
+  <div class="card" style="grid-column:1/-1"><h3>עמודים שנשמרו</h3><div id="nhList"><p class="muted">טוען…</p></div></div></div>`;
+  let items=[];try{items=(await api('GET','/api/c/inbox?lite=1')).sort((a,b)=>(b.capturedAt||'').localeCompare(a.capturedAt||''))}catch(e){}
+  const el=$('#nhList');if(!el)return;
+  const open=items.filter(i=>i.status!=='done');
+  if(!items.length){el.innerHTML='<p class="muted">עדיין לא נשמרו עמודים.</p>';return}
+  el.innerHTML=items.map(i=>`<div class="card" style="margin-bottom:10px;${i.status==='done'?'opacity:.6':''}"><div class="row" style="justify-content:space-between"><b>${esc(i.title||'עמוד מנט המשפט')}</b><span class="muted">${esc((i.capturedAt||'').replace('T',' ').slice(0,16))} · ${esc(i.by||'')}</span></div>
+    <div class="row">${i.status==='done'?'<span class="chip ok">טופל</span>':'<span class="chip prep">ממתין לבדיקה</span>'}<span class="muted">${(i.files||[]).length} מסמכים</span>
+    <button class="btn sm" type="button" data-act="nhOpen" data-id="${esc(i.id)}">בדוק ושייך</button>${i.status!=='done'?`<button class="btn ghost sm" type="button" data-act="nhDone" data-id="${esc(i.id)}">סמן כטופל</button>`:''}<button class="btn danger sm" type="button" data-act="nhDel" data-id="${esc(i.id)}">מחק</button></div></div>`).join('');
+  $('#nhCount').textContent=open.length?`(${open.length})`:'';
+}
+async function nhSheet(id){
+  const r=await api('GET','/api/c/inbox/'+id);if(!r.exists)return;const it=r.data;
+  S.props=parsePaste(it.text||'');
+  const files=it.files||[];
+  const o=sheet(`<h2>${esc(it.title||'עמוד מנט המשפט')}</h2><p class="muted" style="overflow-wrap:anywhere">${esc(it.url||'')}</p>
+    <h3>מסמכים שהגיעו (${files.length})</h3>
+    ${files.length?`<ul class="docs">${files.map((f,k)=>{const g=guessCaseForText(f.name+' '+(f.linkText||''))||guessCaseForText(it.text);return `<li><span class="nm"><a href="/files/${esc(f.fileId)}" target="_blank" rel="noopener">${esc(f.name)}</a></span>
+      <select data-fc="${k}" aria-label="תיק" style="width:auto;max-width:220px"><option value="">בחרו תיק…</option>${caseOptions(g?.id)}</select>
+      <select data-fk="${k}" aria-label="סוג" style="width:auto">${DOC_KINDS.map(x=>`<option ${x===guessDocKind(f.name)||(x==='החלטה'&&guessDocKind(f.name)==='אחר')?'selected':''}>${x}</option>`).join('')}</select>
+      ${f.savedDocId?'<span class="chip ok">נשמר בתיק</span>':`<button class="btn sm" type="button" data-fs="${k}">שמור לתיק</button>`}</li>`}).join('')}</ul>`:'<p class="muted">לא הגיעו קבצים מהעמוד הזה. אם יש בו החלטות, הורידו אותן מנט המשפט וגררו לכרטיס התיק.</p>'}
+    <h3>מועדים שזוהו בטקסט העמוד</h3><div id="props"></div>
+    <details><summary class="muted" style="cursor:pointer">הטקסט המלא של העמוד</summary><textarea readonly class="draft">${esc(it.text||'')}</textarea></details>
+    <div class="actions"><button class="btn ghost" type="button" data-act="nhDone" data-id="${esc(id)}">סמן כטופל</button><button class="btn ghost" type="button" data-close>סגור</button></div>`,
+  o=>{
+    renderProps();
+    o.querySelectorAll('[data-fs]').forEach(b=>b.addEventListener('click',async()=>{const k=+b.dataset.fs,f=files[k],cid=o.querySelector(`[data-fc="${k}"]`).value;
+      if(!cid){toast('בחרו תיק');return}b.disabled=true;b.textContent='קורא…';
+      try{const blob=await (await fetch('/files/'+f.fileId,{credentials:'same-origin'})).blob();const file=new File([blob],f.name,{type:blob.type});
+        let text='',pages=0;try{const x=await fileText(file);text=x.text.trim();pages=x.pages}catch(e){}
+        const ref=S.db.collection('docs').doc();
+        await ref.set({caseId:cid,name:f.name,kind:o.querySelector(`[data-fk="${k}"]`).value,text:text.slice(0,MAXCH),truncated:text.length>MAXCH,chars:text.length,pages,fileId:f.fileId,assetUrl:'/files/'+f.fileId,source:'נט המשפט',uploadedAt:new Date().toISOString()});
+        files[k].savedDocId=ref.id;await api('PATCH','/api/c/inbox/'+id,{files});
+        b.outerHTML=`<span class="chip ok">נשמר בתיק${text.length<40?' — סרוק, בלי טקסט':''}</span>`;
+      }catch(e){b.disabled=false;b.textContent='שמור לתיק';toast('השמירה נכשלה')}}));
+  });
+}
+async function renderSettings(){
+  const ppl=S.people||[],adm=!!S.admin,admins=S.admins||[],th=S.settings.theme||{};
+  const peopleCard=`<div class="card"><h3>העובדים במשרד</h3><p class="muted">השמות שמופיעים במסך "מי עובד/ת על המחשב הזה", ובבחירת אחראי לתיק.</p>
+    <ul class="docs">${ppl.map(p=>`<li><span class="av">${esc(initials(p))}</span><span class="nm">${esc(p)}${admins.includes(p)?' <span class="adm-badge">מנהל</span>':''}</span>${adm?`<button class="btn danger sm" type="button" data-act="delPerson" data-id="${esc(p)}">הסר</button>`:''}</li>`).join('')||'<li class="muted">אין שמות עדיין</li>'}</ul>
+    <form id="pF" class="row"><input type="text" name="n" placeholder="שם חדש" style="flex:1 1 180px;width:auto" required><button class="btn" type="submit">הוסף</button></form>
+    <div class="actions"><button class="btn ghost" type="button" id="whoBtn">החלפת המשתמש במחשב הזה</button></div></div>`;
+  let adminCards='';
+  if(!admins.length){
+    adminCards=`<form class="card" id="firstAdm"><h3>הגדרת מנהל המערכת</h3><p class="muted">עדיין אין מנהל. בחרו מי ינהל את המערכת, וקבעו לו קוד אישי.</p>
+      <label class="f"><span>מנהל</span><select name="name" required>${ppl.map(p=>`<option>${esc(p)}</option>`).join('')}</select></label>
+      <label class="f"><span>קוד אישי (4 ספרות לפחות)</span><input type="password" name="pin" inputmode="numeric" minlength="4" required autocomplete="new-password"></label>
+      <div class="actions"><button class="btn" type="submit">קבע מנהל</button></div></form>`;
+  }else if(!adm){
+    adminCards=`<div class="card"><h3>אזור מנהל</h3><p>שינוי העיצוב, פרטי המשרד, קוד הכניסה וניהול המנהלים פתוחים רק למנהל.</p><p class="muted">מנהלים: ${admins.map(esc).join(', ')}</p>
+      <div class="actions">${admins.map(a=>`<button class="btn ghost" type="button" data-admlogin="${esc(a)}">כניסה כ${esc(a)}</button>`).join('')}</div></div>`;
+  }else{
+    adminCards=`<form class="card" id="lookF"><h3>מראה</h3>
+      <div class="f"><span>צבע ראשי</span><div class="swatches">${ACCENTS.map(([c,l])=>`<label class="sw"><input type="radio" name="accent" value="${c}" ${(th.accent||ACCENTS[0][0])===c?'checked':''}><span style="background:${c}"></span>${l}</label>`).join('')}</div></div>
+      <div class="f"><span>גודל אותיות</span><div class="seg">${SIZES.map(([k,l])=>`<label class="opt"><input type="radio" name="size" value="${k}" ${(th.size||'normal')===k?'checked':''}> ${l}</label>`).join('')}</div></div>
+      <div class="f"><span>תצוגה</span><div class="seg">${[['light','בהיר'],['dark','כהה'],['auto','לפי המחשב']].map(([k,l])=>`<label class="opt"><input type="radio" name="mode" value="${k}" ${(th.mode||'light')===k?'checked':''}> ${l}</label>`).join('')}</div></div>
+      <div class="f"><span>לוגו המשרד (תמונה)</span><div class="row"><input type="file" id="logoF" accept="image/*" style="width:auto">${th.logo?'<button class="btn ghost sm" type="button" id="logoX">הסר לוגו</button>':''}</div></div>
+      <p class="note">השינויים מוצגים מיד. לחצו "שמור" כדי שיחולו על כל המחשבים במשרד.</p>
+      <div class="actions"><button class="btn" type="submit">שמור מראה</button></div></form>
+    <form class="card" id="offF"><h3>פרטי המשרד</h3>
+      <label class="f"><span>שם המשרד</span><input type="text" name="officeName" value="${esc(S.settings.officeName||'')}"></label>
+      <label class="f"><span>פרטים לכותרת ולחתימה בטיוטות</span><textarea name="signature" style="min-height:80px" placeholder="כתובת, טלפון, דוא&quot;ל, שמות עורכי הדין">${esc(S.settings.signature||'')}</textarea></label>
+      <label class="f"><span>קישור לפרויקט ב-Claude (לא חובה)</span><input type="text" name="claudeProjectUrl" value="${esc(S.settings.claudeProjectUrl||'')}" placeholder="https://claude.ai/project/..."></label>
+      <div class="actions"><button class="btn" type="submit">שמור</button></div></form>
+    <div class="card"><h3>מנהלים</h3><p class="muted">מנהל מוסיף ומסיר עובדים, משנה את העיצוב ואת ההגדרות, ומוחק מסמכים. כל מנהל נכנס עם קוד אישי.</p>
+      <ul class="docs">${admins.map(a=>`<li><span class="av">${esc(initials(a))}</span><span class="nm">${esc(a)}${a===S.admin?' (את/ה)':''}</span>${admins.length>1?`<button class="btn danger sm" type="button" data-admrm="${esc(a)}">הסר הרשאת מנהל</button>`:''}</li>`).join('')}</ul>
+      <form id="admF" class="grid2"><label class="f"><span>מנהל חדש / שינוי קוד</span><select name="name">${ppl.map(p=>`<option ${p===S.admin?'selected':''}>${esc(p)}</option>`).join('')}</select></label>
+        <label class="f"><span>קוד אישי (4 ספרות לפחות)</span><input type="password" name="pin" inputmode="numeric" minlength="4" required autocomplete="new-password"></label>
+        <div class="actions" style="grid-column:1/-1"><button class="btn" type="submit">שמור מנהל</button></div></form>
+      <div class="actions"><button class="btn ghost" type="button" id="admOut">יציאה ממצב מנהל</button></div></div>
+    <div class="card" id="updC"><h3>עדכוני תוכנה</h3><p class="muted">גרסה מותקנת: <b id="updCur">…</b></p>
+      <form id="srcF" class="row"><input type="text" name="repo" id="updRepo" placeholder="שם המאגר ב-GitHub, למשל yossi/lawboard" style="flex:1 1 220px;width:auto"><button class="btn ghost" type="submit">שמור מקור</button></form>
+      <div id="updBox" class="muted">בודק…</div></div>
+    <form class="card" id="codeF"><h3>קוד כניסה למשרד</h3><p class="muted">כל מחשב חדש יתבקש להקליד את הקוד פעם אחת. השאירו ריק ולחצו "שמור" כדי לבטל את הקוד.</p>
+      <label class="f"><span>קוד חדש</span><input type="text" name="code" inputmode="numeric" autocomplete="off"></label>
+      <div class="actions"><button class="btn" type="submit">שמור קוד</button></div></form>`;
+  }
+  $V().innerHTML=`<div class="cols">${peopleCard}${adminCards}</div>`;
+  $('#pF').addEventListener('submit',async e=>{e.preventDefault();const n=new FormData(e.target).get('n').trim();if(n&&!ppl.includes(n))await savePeople([...ppl,n]);render()});
+  $('#whoBtn').addEventListener('click',()=>showWho(true));
+  document.querySelectorAll('[data-admlogin]').forEach(b=>b.addEventListener('click',()=>adminPinGate(b.dataset.admlogin,()=>{document.querySelector('.gate')?.remove();render()})));
+  $('#firstAdm')?.addEventListener('submit',async e=>{e.preventDefault();const d=Object.fromEntries(new FormData(e.target));
+    try{await api('POST','/api/admin/set',d);await fetch('/api/admin/login',{method:'POST',credentials:'same-origin',headers:{'Content-Type':'application/json'},body:JSON.stringify(d)});S.admin=d.name;setMe(d.name);await loadAdmin();toast(`${d.name} הוגדר כמנהל`);render()}catch(x){toast(x.message||'השמירה נכשלה')}});
+  if(!adm)return;
+  const look=$('#lookF'),preview=()=>{const d=Object.fromEntries(new FormData(look));S.settings.theme={...(S.settings.theme||{}),...d};applyTheme()};
+  look.addEventListener('change',e=>{if(e.target.type==='radio')preview()});
+  $('#logoF').addEventListener('change',async e=>{const f=e.target.files[0];if(!f)return;if(f.size>2e6){toast('התמונה גדולה מדי (עד 2MB)');return}
+    try{const a=await uploadFile(f);S.settings.theme={...(S.settings.theme||{}),logo:a.url};applyTheme();toast('הלוגו נטען. לחצו "שמור מראה".')}catch(x){toast('הטעינה נכשלה')}});
+  $('#logoX')?.addEventListener('click',()=>{S.settings.theme={...(S.settings.theme||{}),logo:''};applyTheme()});
+  look.addEventListener('submit',async e=>{e.preventDefault();const d=Object.fromEntries(new FormData(look));try{await saveSettings({theme:{...(S.settings.theme||{}),...d}});toast('המראה נשמר לכל המשרד')}catch(x){toast(x.message||'השמירה נכשלה. ודאו שאתם מחוברים כמנהל.')}});
+  $('#offF').addEventListener('submit',async e=>{e.preventDefault();await saveSettings(Object.fromEntries(new FormData(e.target)));toast('נשמר')});
+  $('#codeF').addEventListener('submit',async e=>{e.preventDefault();const code=new FormData(e.target).get('code').trim();await api('POST','/api/code',{code});e.target.reset();toast(code?'הקוד נשמר. מחשבים אחרים יתבקשו להקליד אותו פעם אחת.':'הקוד בוטל')});
+  $('#admF').addEventListener('submit',async e=>{e.preventDefault();const d=Object.fromEntries(new FormData(e.target));try{await api('POST','/api/admin/set',d);e.target.reset();await loadAdmin();toast(`${d.name} מוגדר כמנהל`);render()}catch(x){toast(x.message||'השמירה נכשלה')}});
+  document.querySelectorAll('[data-admrm]').forEach(b=>b.addEventListener('click',async()=>{if(!b.dataset.sure){b.dataset.sure=1;b.textContent='לחצו שוב לאישור';return}
+    try{await api('POST','/api/admin/remove',{name:b.dataset.admrm});if(b.dataset.admrm===S.admin)S.admin=null;await loadAdmin();render()}catch(x){toast(x.message||'הפעולה נכשלה')}}));
+  updCard();
+  $('#srcF').addEventListener('submit',async e=>{e.preventDefault();await api('POST','/api/update/source',{repo:$('#updRepo').value});toast('נשמר');updCard()});
+  $('#admOut').addEventListener('click',async()=>{await fetch('/api/admin/logout',{method:'POST',credentials:'same-origin'});S.admin=null;markAdmin();render()});
+}
+
+/* ---------- writes ---------- */
+async function saveCase(id,d){
+  if(!S.db)return;const now=new Date().toISOString();
+  try{if(id){await S.db.doc('cases/'+id).update({...d,updatedAt:now});return id}
+    const ref=S.db.collection('cases').doc();await ref.set({status:'פעיל',...d,createdAt:now,updatedAt:now});return ref.id}
+  catch(e){writeErr(e)}
+}
+async function upsertCase(d){const ex=[...S.cases.values()].find(c=>(d.number&&c.number===d.number)||(!d.number&&d.fileNo&&c.fileNo===d.fileNo&&c.client===d.client));
+  if(ex){const patch={};for(const k in d)if(d[k]&&!ex[k])patch[k]=d[k];if(Object.keys(patch).length)await saveCase(ex.id,patch);return ex.id}
+  return saveCase(null,d)}
+async function saveTask(id,d){
+  if(!S.db)return;const now=new Date().toISOString();
+  try{if(id)await S.db.doc('tasks/'+id).update({...d,updatedAt:now});else await S.db.collection('tasks').doc().set({done:false,note:'',...d,createdAt:now,updatedAt:now})}
+  catch(e){writeErr(e)}
+}
+function writeErr(e){if(e?.code==='invalid_argument'){S.canWrite=false;banners();render()}toast(e?.message?e.message:e?.code==='quota_exceeded'?'מאגר הנתונים מלא. מחקו מסמכים או תיקים סגורים ישנים.':'השמירה נכשלה. נסו שוב.')}
+
+/* ---------- brief ---------- */
+function briefText(){
+  const T=today(),all=openTasks().filter(mine).sort(byPri);
+  const line=x=>{const c=caseOf(x);return `• ${fmt(x.due)}${x.time?' '+x.time:''} | ${caseLabel(c)} ${c?.number||''} | ${x.title||KINDS[x.kind]?.l}${x.assignee?' | '+x.assignee:''}`};
+  const pick=f=>all.filter(f).map(line).join('\n');
+  const work=all.filter(x=>workState(x)).map(x=>{const w=workState(x);return line(x)+` (יום ${w.dayN}/${w.e})`}).join('\n');
+  return `סיכום בוקר — ${new Date().toLocaleDateString('he-IL')}\n\n⚠ באיחור:\n${pick(x=>x.due<T)||'אין'}\n\nהיום:\n${pick(x=>x.due===T)||'אין'}\n\nלעבוד עליהם עכשיו:\n${work||'אין'}`;
+}
+
+/* ---------- wiring ---------- */
+const IC={
+  today:'<path d="M12 3v2M12 19v2M4.2 4.2l1.4 1.4M18.4 18.4l1.4 1.4M3 12h2M19 12h2M4.2 19.8l1.4-1.4M18.4 5.6l1.4-1.4" stroke="currentColor" stroke-width="2" stroke-linecap="round" fill="none"/><circle cx="12" cy="12" r="4" fill="currentColor"/>',
+  cal:'<rect x="3" y="5" width="18" height="16" rx="2" stroke="currentColor" stroke-width="2" fill="none"/><path d="M3 10h18M8 3v4M16 3v4" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>',
+  cases:'<path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v9a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z" stroke="currentColor" stroke-width="2" fill="none"/>',
+  tasks:'<path d="M9 6h11M9 12h11M9 18h11" stroke="currentColor" stroke-width="2" stroke-linecap="round"/><path d="M4 6l1 1 2-2M4 12l1 1 2-2M4 18l1 1 2-2" stroke="currentColor" stroke-width="1.8" fill="none" stroke-linecap="round"/>',
+  nh:'<path d="M12 3l8 4v2H4V7z M5 10v8M9.5 10v8M14.5 10v8M19 10v8M3 20h18" stroke="currentColor" stroke-width="2" fill="none" stroke-linejoin="round"/>',
+  tools:'<path d="M14.7 6.3a4 4 0 0 0-5.4 5.4L3 18l3 3 6.3-6.3a4 4 0 0 0 5.4-5.4l-2.5 2.5-2.5-.5-.5-2.5z" stroke="currentColor" stroke-width="2" fill="none" stroke-linejoin="round"/>',
+  settings:'<circle cx="12" cy="12" r="3" stroke="currentColor" stroke-width="2" fill="none"/><path d="M12 2v3M12 19v3M2 12h3M19 12h3M4.9 4.9 7 7M17 17l2.1 2.1M4.9 19.1 7 17M17 7l2.1-2.1" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>'
+};
+const VIEWS={
+  today:{t:'היום שלי',d:'מה דחוף, על מה כדאי לעבוד היום, ומה מתקרב. מתחילים מכאן כל בוקר.'},
+  cal:{t:'יומן',d:'שלושה שבועות קדימה: דיונים, מועדי הגשה, והימים שהמערכת שריינה לעבודה על כל מסמך.'},
+  cases:{t:'התיקים',d:'טבלת השליטה של המשרד: כל תיק פתוח עם הסטטוס האחרון, הפעולה הבאה והמועד הבא. תיקים שהסתיימו עוברים ל"תיקים סגורים".'},
+  tasks:{t:'כל המשימות',d:'רשימה מלאה של כל המועדים והמשימות, לפי תאריך.'},
+  nh:{t:'נט המשפט',d:'כאן נכנסות ההחלטות והמועדים מנט המשפט: בכפתור בסרגל הסימניות, או בהדבקת טקסט.'},
+  tools:{t:'כלים',d:'מחשבון מועדים, קליטת קובץ אקסל, ודוגמאות לסגנון הכתיבה של המשרד.'},
+  settings:{t:'הגדרות ועזרה',d:'שמות העובדים, קוד כניסה למשרד, חיבור ל-Claude, והסבר על כל חלקי המערכת.'}
+};
+const SUBS={
+  nh:[['inbox','עמודים שנשמרו',()=>renderNH()],['paste','הדבקת טקסט',()=>renderImport('paste')]],
+  tools:[['calc','מחשבון מועדים',()=>renderCalc()],['excel','קליטת אקסל',()=>renderImport('excel')],['style','סגנון המשרד',()=>renderStyle()]],
+  settings:[['settings','הגדרות',()=>renderSettings()],['help','איך משתמשים',()=>renderHelp()]]
+};
+const ALIAS={calc:['tools','calc'],import:['tools','excel'],style:['tools','style'],help:['settings','help']};
+function drawNav(){
+  $('#tabs').innerHTML=Object.entries(VIEWS).map(([k,v])=>`<button type="button" data-v="${k}" ${k===S.view?'aria-current="page"':''}><svg viewBox="0 0 24 24" width="20" height="20" aria-hidden="true">${IC[k]}</svg><span class="lbl">${v.t}</span>${k==='nh'?'<span class="cnt" id="nhCount"></span>':''}</button>`).join('');
+}
+function render(){
+  if(ALIAS[S.view]){S.sub=S.sub||{};S.sub[ALIAS[S.view][0]]=ALIAS[S.view][1];S.view=ALIAS[S.view][0]}
+  if(!VIEWS[S.view])S.view='today';
+  const cnt=$('#nhCount')?.textContent||'';drawNav();if($('#nhCount'))$('#nhCount').textContent=cnt;
+  $('#pTitle').textContent=VIEWS[S.view].t;$('#pDesc').textContent=VIEWS[S.view].d;
+  $('#addCaseBtn').hidden=!S.canWrite;banners();
+  const subs=SUBS[S.view];
+  if(subs){S.sub=S.sub||{};const cur=S.sub[S.view]||subs[0][0];
+    $('#view').innerHTML=`<div class="seg" role="tablist">${subs.map(([k,l])=>`<button type="button" data-sub="${k}" aria-selected="${k===cur}">${l}</button>`).join('')}</div><div id="sub"></div>`;
+    (subs.find(x=>x[0]===cur)||subs[0])[2]();
+  }else{$('#view').innerHTML='';({today:renderToday,cal:renderCal,cases:renderCases,tasks:renderTasks}[S.view])()}
+}
+function go(v){S.view=v;try{localStorage.setItem('cb.view',v)}catch(e){}render();window.scrollTo(0,0)}
+$('#tabs').addEventListener('click',e=>{const b=e.target.closest('button[data-v]');if(b)go(b.dataset.v)});
+$('#view').addEventListener('click',e=>{const w=e.target.closest('button[data-owner]');if(w){S.owner=S.owner===w.dataset.owner?'':w.dataset.owner;render();return}const b=e.target.closest('button[data-sub]');if(b){S.sub=S.sub||{};S.sub[S.view]=b.dataset.sub;render()}});
+$('#addCaseBtn').addEventListener('click',()=>caseForm());
+$('#meBtn').addEventListener('click',()=>showWho(true));
+$('#copyBrief').addEventListener('click',async()=>{const txt=briefText();if(await copyText(txt))toast('הסיכום הועתק — אפשר להדביק בוואטסאפ או במייל');else sheet(`<h2>סיכום בוקר</h2><textarea readonly id="bt">${esc(txt)}</textarea><div class="actions"><button class="btn ghost" data-close type="button">סגור</button></div>`,o=>o.querySelector('#bt').select())});
+document.addEventListener('change',e=>{if(e.target.id==='ownerF'){S.owner=e.target.value;S.ownerSet=true;render()}if(e.target.id==='tStatus'){S.tStatus=e.target.value;render()}});
+document.addEventListener('click',async e=>{
+  const ed=e.target.closest('td[data-edit]');if(ed){startEdit(ed);return}
+  const a=e.target.closest('[data-act]');if(!a)return;const id=a.dataset.id;
+  const closeAll=()=>document.querySelectorAll('.overlay').forEach(o=>o.remove());
+  switch(a.dataset.act){
+    case'toggle':{const t=S.tasks.get(id);if(t&&S.canWrite){await saveTask(id,{done:!t.done,doneAt:t.done?'':new Date().toISOString()});if(!t.done&&t.caseId)await addLog(t.caseId,'בוצע: '+(t.title||KINDS[t.kind]?.l||''),today());toast(t.done?'הוחזר לרשימה':'כל הכבוד — סומן כבוצע')}break}
+    case'status':closeAll();statusSheet(id);break;
+    case'closeCase':closeAll();closeSheet(id);break;
+    case'reopen':{const c=S.cases.get(id);if(c)await saveCase(id,{status:'פעיל',closeReason:'',closedAt:'',log:[...(c.log||[]),{date:today(),text:'התיק נפתח מחדש',by:S.me?.name||''}],statusAt:today()});closeAll();toast('התיק חזר לתיקים הפתוחים');break}
+    case'case':closeAll();caseSheet(id);break;
+    case'editTask':if(S.canWrite){closeAll();markSeen(S.tasks.get(id));taskForm(S.tasks.get(id))}break;
+    case'assign':closeAll();assignSheet(id);break;
+    case'take':await saveTask(id,{assignee:S.me?.name||'',seen:true});toast('המשימה אצלך');break;
+    case'newTask':closeAll();taskForm(null,id||'');break;
+    case'editCase':closeAll();caseForm(S.cases.get(id));break;
+    case'goImport':S.sub={...(S.sub||{}),tools:'excel'};go('tools');break;
+    case'goNH':go('nh');break;
+    case'goCases':go('cases');break;
+    case'goUnassigned':S.owner='__none';go('tasks');break;
+    case'hideWelcome':try{localStorage.setItem('lb.welcomed','1')}catch(x){}render();break;
+    case'nhOpen':closeAll();nhSheet(id);break;
+    case'nhDone':await api('PATCH','/api/c/inbox/'+id,{status:'done'});closeAll();if(S.view==='nh')render();toast('סומן כטופל');break;
+    case'nhDel':{if(!a.dataset.sure){a.dataset.sure=1;a.textContent='לחצו שוב';return}const r=await api('GET','/api/c/inbox/'+id);for(const f of r.data?.files||[])if(!f.savedDocId)fetch('/api/files/'+f.fileId,{method:'DELETE'}).catch(()=>{});await api('DELETE','/api/c/inbox/'+id);render();break}
+    case'draft':closeAll();markSeen(S.tasks.get(id));draftSheet(id,S.tasks.get(id)?.caseId);break;
+    case'draftCase':closeAll();draftSheet(null,id);break;
+    case'viewDoc':{const o=a.closest('.overlay'),d=o?._docs?.find(x=>x.id===id);if(d)sheet(`<h2>${esc(d.name)}</h2><textarea readonly class="draft">${esc(d.text)}</textarea><div class="actions"><button class="btn ghost" data-close type="button">סגור</button></div>`);break}
+    case'delDoc':{if(!a.dataset.sure){a.dataset.sure=1;a.textContent='לחצו שוב';return}const o=a.closest('.overlay'),d=o?._docs?.find(x=>x.id===id);
+      try{await S.db.doc('docs/'+id).delete();if(d?.fileId)fetch('/api/files/'+d.fileId,{method:'DELETE'}).catch(()=>{});toast('המסמך נמחק');o?._refresh?.()}catch(err){writeErr(err)}break}
+    case'delStyle':{if(!a.dataset.sure){a.dataset.sure=1;a.textContent='לחצו שוב';return}try{await S.db.doc('style/'+id).delete();S._styleList?.()}catch(err){writeErr(err)}break}
+    case'delPerson':{if(!a.dataset.sure){a.dataset.sure=1;a.textContent='לחצו שוב';return}await savePeople((S.people||[]).filter(p=>p!==id));render();break}
+  }
+});
+let rt;const soon=()=>{clearTimeout(rt);rt=setTimeout(()=>{if(S.editing)return;if(['tools','settings','nh'].includes(S.view)){banners();return}if(document.activeElement?.id==='q'){renderCases();const n=$('#q');n.focus();return}render()},60)};
+
+/* ---------- first run, office code, who am I, administrators ---------- */
+function gate(html,bind){document.querySelector('.gate')?.remove();const g=document.createElement('div');g.className='gate';g.innerHTML=`<div class="box">${html}</div>`;document.body.appendChild(g);bind&&bind(g);g.querySelector('input,button')?.focus();return g}
+function showSetup(){
+  gate(`<h1>ברוכים הבאים</h1><p>ארבע שאלות קצרות, ומתחילים. אפשר לשנות הכול אחר כך בהגדרות.</p>
+    <form id="su" class="card" style="gap:16px">
+      <label class="f"><span>1. שם המשרד</span><input type="text" name="officeName" placeholder='למשל: משרד עו"ד שמיר' required></label>
+      <label class="f"><span>2. מי עובד במשרד? שם אחד בכל שורה</span><textarea name="people" id="suPpl" style="min-height:120px" placeholder="לדוגמה:&#10;יוסי&#10;צבי&#10;סיוון" required></textarea></label>
+      <div class="grid2"><label class="f"><span>3. מי מנהל המערכת?</span><select name="adminName" id="suAdm" required><option value="">כתבו קודם את השמות למעלה</option></select></label>
+      <label class="f"><span>קוד אישי למנהל (4 ספרות לפחות)</span><input type="password" name="adminPin" inputmode="numeric" minlength="4" required autocomplete="new-password"></label></div>
+      <p class="note">המנהל מוסיף ומסיר עובדים, משנה את העיצוב ומגדיר מנהלים נוספים. הוא מקליד את הקוד האישי כשהוא בוחר בשם שלו.</p>
+      <label class="f"><span>4. קוד כניסה למשרד כולו (לא חובה)</span><input type="text" name="code" inputmode="numeric" placeholder="השאירו ריק אם לא צריך"></label>
+      <p class="note">אם תקבעו קוד משרד, כל מחשב חדש יקליד אותו פעם אחת. בלי קוד, כל מי שמחובר לרשת של המשרד יוכל להיכנס.</p>
+      <p class="note" id="suErr" style="color:var(--late)"></p>
+      <div class="actions"><button class="btn" type="submit">התחלה</button></div></form>`,
+  g=>{const ta=g.querySelector('#suPpl'),sel=g.querySelector('#suAdm');
+    ta.addEventListener('input',()=>{const v=sel.value,ppl=ta.value.split(/\n|,/).map(x=>x.trim()).filter(Boolean);sel.innerHTML=ppl.length?ppl.map(p=>`<option ${p===v?'selected':''}>${esc(p)}</option>`).join(''):'<option value="">כתבו קודם את השמות למעלה</option>'});
+    g.querySelector('#su').addEventListener('submit',async e=>{e.preventDefault();const d=Object.fromEntries(new FormData(e.target));
+      const people=d.people.split(/\n|,/).map(x=>x.trim()).filter(Boolean);
+      const r=await fetch('/api/setup',{method:'POST',credentials:'same-origin',headers:{'Content-Type':'application/json'},body:JSON.stringify({officeName:d.officeName,people,code:d.code,adminName:d.adminName,adminPin:d.adminPin})});
+      if(r.ok){try{localStorage.removeItem('lb.me')}catch(x){}
+        await fetch('/api/admin/login',{method:'POST',credentials:'same-origin',headers:{'Content-Type':'application/json'},body:JSON.stringify({name:d.adminName,pin:d.adminPin})});
+        try{localStorage.setItem('lb.me',d.adminName)}catch(x){}location.reload()}
+      else g.querySelector('#suErr').textContent='השמירה נכשלה. נסו לרענן את הדף.'})});
+}
+function showUnlock(){
+  gate(`<h1>קוד המשרד</h1><p>המחשב הזה עוד לא מוכר למערכת. הקלידו את קוד המשרד פעם אחת, והמחשב יזכור אותו.</p>
+    <form id="ul" class="card" style="gap:14px"><label class="f"><span>קוד</span><input type="password" name="code" inputmode="numeric" autocomplete="off" required></label>
+    <p class="note" id="ulErr" style="color:var(--late)"></p><div class="actions"><button class="btn" type="submit">כניסה</button></div>
+    <p class="note">שכחתם את הקוד? במחשב הראשי, בתיקייה C:\\LawBoard, לחצו פעמיים על reset-code.bat.</p></form>`,
+  g=>g.querySelector('#ul').addEventListener('submit',async e=>{e.preventDefault();const code=new FormData(e.target).get('code');
+    const r=await fetch('/api/unlock',{method:'POST',credentials:'same-origin',headers:{'Content-Type':'application/json'},body:JSON.stringify({code})});
+    if(r.ok)location.reload();else{let m='הקוד לא נכון';try{m=(await r.json()).error||m}catch(x){}g.querySelector('#ulErr').textContent=m}}));
+}
+function initials(n){return String(n||'?').trim().split(/\s+/).map(w=>w[0]).slice(0,2).join('')}
+function setMe(name){if(S.me?.name!==name&&!S.ownerSet){S.owner=[...S.tasks.values()].some(t=>!t.done&&t.assignee===name)?name:''}S.me={name};try{localStorage.setItem('lb.me',name)}catch(e){}$('#meName').textContent=name;$('#meAv').textContent=initials(name);markAdmin()}
+function markAdmin(){document.body.classList.toggle('not-admin',!S.admin);const b=$('#meName');if(b)b.innerHTML=esc(S.me?.name||'—')+(S.admin?' <span class="adm-badge">מנהל</span>':'')}
+async function loadAdmin(){try{const a=await api('GET','/api/admin');S.admin=a.admin&&a.admin===S.me?.name?a.admin:null;S.admins=a.admins||[];
+  if(a.admin&&a.admin!==S.me?.name){await fetch('/api/admin/logout',{method:'POST',credentials:'same-origin'});S.admin=null}}catch(e){S.admin=null;S.admins=[]}markAdmin()}
+function adminPinGate(name,after){
+  gate(`<h1>שלום ${esc(name)}</h1><p>אתה מוגדר כמנהל המערכת. הקלד את הקוד האישי שלך.</p>
+    <form id="ap" class="card" style="gap:14px"><label class="f"><span>קוד אישי</span><input type="password" name="pin" inputmode="numeric" autocomplete="current-password" required></label>
+    <p class="note" id="apErr" style="color:var(--late)"></p>
+    <div class="actions"><button class="btn" type="submit">כניסה כמנהל</button><button class="btn ghost" type="button" id="apSkip">המשך בלי הרשאות מנהל</button></div>
+    <p class="note">שכחת את הקוד? במחשב הראשי, בתיקייה C:\\LawBoard, לחץ פעמיים על reset-code.bat, ואז הגדר מנהל מחדש בהגדרות.</p></form>`,
+  g=>{g.querySelector('#apSkip').addEventListener('click',async()=>{await fetch('/api/admin/logout',{method:'POST',credentials:'same-origin'});S.admin=null;setMe(name);g.remove();after&&after()});
+    g.querySelector('#ap').addEventListener('submit',async e=>{e.preventDefault();const pin=new FormData(e.target).get('pin');
+      const r=await fetch('/api/admin/login',{method:'POST',credentials:'same-origin',headers:{'Content-Type':'application/json'},body:JSON.stringify({name,pin})});
+      if(r.ok){S.admin=name;setMe(name);g.remove();after&&after()}else{let m='הקוד לא נכון';try{m=(await r.json()).error||m}catch(x){}g.querySelector('#apErr').textContent=m}})});
+}
+function pick(name){
+  if((S.admins||[]).includes(name))return adminPinGate(name,()=>{document.querySelector('.gate')?.remove();render()});
+  fetch('/api/admin/logout',{method:'POST',credentials:'same-origin'});S.admin=null;setMe(name);document.querySelector('.gate')?.remove();render();
+}
+function showWho(canCancel){
+  const ppl=S.people||[];
+  gate(`<h1>מי עובד/ת על המחשב הזה?</h1><p>לחצו על השם שלכם. כך המערכת יודעת מי עדכן כל דבר. אפשר להחליף בכל רגע מהתפריט.</p>
+    <div class="picker">${ppl.map(p=>`<button type="button" data-who="${esc(p)}"><span class="av">${esc(initials(p))}</span>${esc(p)}${(S.admins||[]).includes(p)?'<span class="adm-badge">מנהל</span>':''}</button>`).join('')}</div>
+    <form id="wf" class="row"><input type="text" name="n" placeholder="השם שלי לא ברשימה — הקלידו כאן" style="flex:1 1 220px;width:auto"><button class="btn ghost" type="submit">הוסף והמשך</button></form>
+    ${canCancel?'<div class="actions"><button class="btn ghost" type="button" id="wc">ביטול</button></div>':''}`,
+  g=>{g.querySelectorAll('[data-who]').forEach(b=>b.addEventListener('click',()=>pick(b.dataset.who)));
+    g.querySelector('#wc')?.addEventListener('click',()=>g.remove());
+    g.querySelector('#wf').addEventListener('submit',async e=>{e.preventDefault();const n=new FormData(e.target).get('n').trim();if(!n)return;
+      if(!ppl.includes(n))await savePeople([...ppl,n]);pick(n)});});
+}
+async function savePeople(list){S.people=list;await S.db.doc('settings/people').set({list})}
+async function saveSettings(patch){S.settings={...S.settings,...patch};await S.db.doc('settings/main').set(S.settings);applyTheme()}
+
+/* ---------- software updates ---------- */
+async function updCard(){
+  const box=$('#updBox');if(!box)return;
+  let u;try{u=await api('GET','/api/update')}catch(e){box.textContent=e.message||'לא הצלחתי לבדוק עדכונים.';return}
+  $('#updCur').textContent=u.current;if(u.repo&&!$('#updRepo').value)$('#updRepo').value=u.repo;
+  if(!u.configured){box.innerHTML='עדיין לא הוגדר מקור לעדכונים. הקלידו את שם המאגר ב-GitHub ולחצו "שמור מקור".';return}
+  if(!u.available){box.innerHTML=`<span class="chip ok">המערכת מעודכנת</span> (הגרסה האחרונה: ${esc(u.latest)})`;return}
+  box.innerHTML=`<div class="banner" style="margin:0;background:var(--soon-bg)"><span><b>יש גרסה חדשה: ${esc(u.latest)}</b>${u.notes?'<br>'+esc(u.notes):''}</span><button class="btn" type="button" id="updGo">עדכן עכשיו</button></div><p class="note">העדכון לוקח פחות מדקה. כל הנתונים נשמרים. המערכת תיעצר לכמה שניות ותחזור לבד.</p>`;
+  $('#updGo').addEventListener('click',applyUpdate);
+}
+async function applyUpdate(){
+  const g=gate('<h1>מעדכן…</h1><p>מוריד ומתקין את הגרסה החדשה. אל תסגרו את הדף.</p>');
+  let before='';try{before=(await api('GET','/api/version')).version}catch(e){}
+  try{await api('POST','/api/update/apply',{})}catch(e){g.remove();toast(e.message||'העדכון נכשל');return}
+  const t0=Date.now();
+  const poll=async()=>{try{const r=await fetch('/api/version',{credentials:'same-origin'});if(r.ok){const v=(await r.json()).version;if(v&&v!==before||Date.now()-t0>8000){location.reload();return}}}catch(e){}
+    if(Date.now()-t0>60000){g.querySelector('p').textContent='המערכת לא חזרה. במחשב הראשי, לחצו על קיצור הדרך "לוח בקרת תיקים".';return}setTimeout(poll,1500)};
+  setTimeout(poll,2500);
+}
+async function updNotice(){if(!S.admin)return;try{const u=await api('GET','/api/update');if(u.available)toast(`יש גרסה חדשה (${u.latest}). לעדכון: הגדרות ועזרה ← עדכוני תוכנה`)}catch(e){}}
+
+/* ---------- appearance ---------- */
+const ACCENTS=[['#1F5A86','כחול'],['#17675A','ירוק'],['#5B3E96','סגול'],['#8E2F3C','בורדו'],['#36495C','אפור-כחול'],['#7A5200','חום-זהב']];
+const SIZES=[['normal','רגיל','100%'],['large','גדול','112%'],['xl','גדול מאוד','125%']];
+function applyTheme(){
+  const th=S.settings.theme||{},root=document.documentElement;
+  const mode=th.mode||'light';
+  if(mode==='auto')delete root.dataset.theme;else root.dataset.theme=mode;
+  if(th.accent&&mode!=='dark')root.style.setProperty('--accent',th.accent);else root.style.removeProperty('--accent');
+  root.style.fontSize=(SIZES.find(x=>x[0]===th.size)||SIZES[0])[2];
+  $('#officeName').textContent=S.settings.officeName||'לוח בקרת תיקים';
+  const lg=document.querySelector('.brand .logo');
+  if(lg)lg.classList.toggle('has-img',!!th.logo);
+  if(lg)lg.innerHTML=th.logo?`<img src="${esc(th.logo)}" alt="לוגו המשרד">`:'<svg viewBox="0 0 24 24" width="22" height="22"><path d="M5 4h14v3H5zm0 6.5h14v3H5zM5 17h9v3H5z" fill="currentColor"/></svg>';
+}
+async function init(){
+  header();
+  try{const v=localStorage.getItem('cb.view');if(v)S.view=v}catch(e){}
+  S.settings={};drawNav();
+  let me;try{me=await (await fetch('/api/me',{credentials:'same-origin'})).json()}catch(e){$('#view').innerHTML='<div class="empty"><h3>אין חיבור למערכת</h3><p>ודאו שהמחשב הראשי של המשרד דלוק ושהמערכת פועלת בו (קיצור הדרך "לוח בקרת תיקים"), ואז רעננו את הדף.</p></div>';return}
+  if(me.setup){showSetup();return}
+  if(me.locked){showUnlock();return}
+  S.db=makeDB();
+  try{const st=await S.db.doc('settings/main').get();if(st.exists)S.settings=st.data()}catch(e){}
+  try{const pp=await S.db.doc('settings/people').get();S.people=pp.exists?pp.data().list||[]:(S.settings.people||[])}catch(e){S.people=S.settings.people||[]}
+  applyTheme();
+  let saved='';try{saved=localStorage.getItem('lb.me')||''}catch(e){}
+  if(saved)S.me={name:saved};
+  await loadAdmin();
+  if(saved)setMe(saved);
+  render();
+  setTimeout(updNotice,3000);
+  if(!saved)showWho(false);
+  else if(S.admins.includes(saved)&&!S.admin)adminPinGate(saved,()=>{document.querySelector('.gate')?.remove();render()});
+  const sub=(col)=>S.db.collection(col).onSnapshot(snap=>{const m=new Map();snap.docs.forEach(d=>m.set(d.id,{id:d.id,...d.data()}));S[col]=m;S.loaded[col]=true;soon()},err=>{S.loaded[col]=true;if(err?.code!=='auth')toast('אין חיבור למחשב הראשי. בודק שוב…')});
+  sub('cases');sub('tasks');
+  const nhc=async()=>{try{const n=(await api('GET','/api/c/inbox?lite=1')).filter(i=>i.status!=='done').length;if($('#nhCount'))$('#nhCount').textContent=n||''}catch(e){}};nhc();setInterval(nhc,60e3);
+  setInterval(()=>{header();if(S.view==='today'||S.view==='cal')soon()},10*60e3);
+}
+init();
+</script>
+</body>
+</html>

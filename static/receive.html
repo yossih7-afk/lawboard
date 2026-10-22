@@ -1,0 +1,57 @@
+<!doctype html>
+<html lang="he" dir="rtl">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>שמירה מנט המשפט</title>
+<style>
+:root{--bg:#F2F3EF;--ink:#18212B;--muted:#56616C;--ok:#2E6A3E;--late:#B42318;--accent:#1D5C74}
+@media (prefers-color-scheme:dark){:root{--bg:#11161C;--ink:#E6EAED;--muted:#9AA6B1;--ok:#7FC491;--late:#F28B7E;--accent:#73B6CF;color-scheme:dark}}
+html,body{background:var(--bg);color:var(--ink);font-family:"Assistant","Segoe UI",Arial,sans-serif;margin:0}
+main{padding:28px 20px;display:flex;flex-direction:column;gap:10px;font-size:17px}
+h1{font-size:1.3rem;margin:0}
+#st{color:var(--muted)} .ok{color:var(--ok);font-weight:700} .err{color:var(--late);font-weight:700}
+a{color:var(--accent)}
+</style>
+</head>
+<body>
+<main>
+  <h1>שמירה מנט המשפט</h1>
+  <div id="st">ממתין לנתונים מהעמוד…</div>
+  <ul id="files"></ul>
+</main>
+<script>
+const st=document.getElementById('st'),ul=document.getElementById('files');
+const say=(t,c)=>{st.textContent=t;st.className=c||''};
+let busy=false;
+async function save(p){
+  if(busy)return;busy=true;
+  say('שומר את העמוד…');
+  const r=await fetch('/api/c/inbox',{method:'POST',credentials:'same-origin',headers:{'Content-Type':'application/json'},
+    body:JSON.stringify({url:p.url,title:p.title,text:p.text,links:p.links,files:[],status:'new',capturedAt:new Date().toISOString().slice(0,19)})});
+  if(r.status===401||r.status===409){say('צריך לפתוח את המערכת בדפדפן הזה קודם. אחר כך נסו שוב.','err');return}
+  if(!r.ok){say('השמירה נכשלה. ודאו שתוכנת הלוח פועלת במחשב המשרד.','err');return}
+  const {id}=await r.json();const files=[];
+  for(const f of p.files||[]){
+    const li=document.createElement('li');li.textContent=f.name+' …';ul.appendChild(li);
+    try{const u=await fetch('/api/files?name='+encodeURIComponent(f.name),{method:'POST',credentials:'same-origin',headers:{'Content-Type':f.type||'application/octet-stream'},body:f.blob});
+      const j=await u.json();files.push({fileId:j.id,name:f.name,href:f.href});li.textContent=f.name+' ✓'}catch(e){li.textContent=f.name+' — לא נשמר'}
+  }
+  if(files.length)await fetch('/api/c/inbox/'+id,{method:'PATCH',credentials:'same-origin',headers:{'Content-Type':'application/json'},body:JSON.stringify({files})});
+  say(`נשמר: "${p.title||'עמוד'}"${files.length?` ועוד ${files.length} מסמכים`:''}. אפשר לבדוק ולשייך בלשונית "נט המשפט" בלוח. החלון ייסגר עוד רגע.`,'ok');
+  setTimeout(()=>window.close(),5000);
+}
+addEventListener('message',e=>{
+  let host='';try{host=new URL(e.origin).hostname}catch(x){}
+  if(!(host==='court.gov.il'||host.endsWith('.court.gov.il'))){return}
+  if(e.data==='nh-ping'&&window.opener){window.opener.postMessage('nh-ready','*');return}
+  if(e.data&&typeof e.data==='object'&&'text' in e.data)save(e.data).catch(()=>say('השמירה נכשלה.','err'));
+});
+fetch('/api/me',{credentials:'same-origin'}).then(r=>r.json()).then(m=>{
+  if(m.setup||m.locked){say('צריך לפתוח את המערכת בדפדפן הזה קודם (ולהקליד את קוד המשרד אם יש). אחר כך לחצו שוב על הכפתור בנט המשפט.','err');return}
+  if(window.opener)window.opener.postMessage('nh-ready','*');else say('פתחו את החלון הזה דרך הכפתור "שמור מנט המשפט" בסרגל הסימניות.');
+}).catch(()=>say('אין חיבור לתוכנת הלוח.','err'));
+setTimeout(()=>{if(!busy&&st.className!=='err')say('לא הגיעו נתונים. לחצו שוב על הכפתור בעמוד של נט המשפט.')},12000);
+</script>
+</body>
+</html>
