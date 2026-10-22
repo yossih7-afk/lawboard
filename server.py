@@ -40,7 +40,7 @@ VERSION_FILE = ROOT / "VERSION"
 RESTART_CODE = 3  # start.bat starts the server again when it exits with this code
 DB_PATH = DATA / "office.db"
 
-COLLECTIONS = {"cases", "tasks", "docs", "style", "drafts", "inbox", "settings"}
+COLLECTIONS = {"cases", "tasks", "deals", "docs", "style", "drafts", "inbox", "settings"}
 MAX_BODY = 30 * 1024 * 1024
 SESSION_DAYS = 30
 
@@ -504,7 +504,7 @@ class Handler(BaseHTTPRequestHandler):
         if method in ("PUT", "PATCH", "DELETE", "POST") and not self.admin():
             if col == "settings" and did != "people":
                 return self.fail(403, "רק מנהל יכול לשנות הגדרות")
-            if method == "DELETE" and col in ("cases", "docs", "style"):
+            if method == "DELETE" and col in ("cases", "deals", "docs", "style"):
                 return self.fail(403, "רק מנהל יכול למחוק")
             if col == "tasks" and did and method in ("PUT", "PATCH") and "assignee" in self.body_json_cached():
                 with db() as c:
