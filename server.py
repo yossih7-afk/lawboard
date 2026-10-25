@@ -625,7 +625,11 @@ class Handler(BaseHTTPRequestHandler):
                 with db() as c:
                     r = c.execute("SELECT data FROM kv WHERE col='tasks' AND id=?", (did,)).fetchone()
                 if r and json.loads(r["data"]).get("assignee", "") != me:
-                    return self.fail(403, "המשימה הזו שייכת לעובד אחר")
+                    # a preliminary-procedure step is shared by the case: anyone may move its deadline or close it
+                    step_only = method == "PATCH" and json.loads(r["data"]).get("preStep") and \
+                        set(self.body_json_cached()) <= {"due", "done", "doneAt", "updatedAt"}
+                    if not step_only:
+                        return self.fail(403, "המשימה הזו שייכת לעובד אחר")
             if method in ("POST", "PUT") and not r:
                 body = self.body_json_cached()
                 if body.get("assignee", me) != me:

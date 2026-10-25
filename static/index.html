@@ -231,10 +231,13 @@ body.not-admin .adm-only{display:none!important}
 .pill.done{background:var(--ok-bg);border-color:var(--ok);color:var(--ok)}
 .pill.na{text-decoration:line-through;opacity:.55}
 .pill:hover{border-color:var(--accent)}
+.pill.late{border-color:var(--late);color:var(--late)}
+.pill small{font-weight:400;opacity:.85}
+.pill i{font-style:normal}
 .pbar{height:6px;background:var(--sunk);border-radius:99px;overflow:hidden;margin:2px 0}
 .pbar i{display:block;height:100%;background:var(--ok)}
-table.deals{min-width:1000px}
-table.deals td:nth-child(4){min-width:260px!important}
+table.prelim{min-width:980px}
+table.prelim td:nth-child(4){min-width:340px!important}
 .chip.new{background:var(--accent);color:var(--accent-ink)}
 .sect{font-family:var(--display);font-weight:500;font-size:1.2rem;margin:0 0 10px;display:flex;gap:8px;align-items:baseline;flex-wrap:wrap}
 .sect small{font-family:var(--body);font-size:.85rem}
@@ -348,8 +351,8 @@ const RULES=[
   {k:'setaside',l:'ביטול פס"ד שניתן בהיעדר',d:30,from:'המצאת פסק הדין'},
   {k:'submission',l:'מועד לפי החלטת בית המשפט',d:null,from:'מתן ההחלטה'}
 ];
-const DOC_KINDS=['החלטה','פסק דין','פרוטוקול','כתב תביעה','כתב הגנה','כתב תשובה','בקשה','תגובה','תשובה לתגובה','תצהיר','חוות דעת','מכתב / תכתובת','מסמך שלנו (טיוטה/הוגש)','אחר'];
-const S={cases:new Map(),tasks:new Map(),db:null,sample:null,assets:null,canWrite:true,deals:new Map(),loaded:{cases:false,tasks:false,deals:false},view:'today',q:'',owner:'',caseView:'open',flt:'',sort:null,tStatus:'open',xls:null,props:[]};
+const DOC_KINDS=['החלטה','פסק דין','פרוטוקול','הליכים מקדמיים','כתב תביעה','כתב הגנה','כתב תשובה','בקשה','תגובה','תשובה לתגובה','תצהיר','חוות דעת','מכתב / תכתובת','מסמך שלנו (טיוטה/הוגש)','אחר'];
+const S={cases:new Map(),tasks:new Map(),db:null,sample:null,assets:null,canWrite:true,loaded:{cases:false,tasks:false},view:'today',q:'',owner:'',caseView:'open',flt:'',sort:null,tStatus:'open',xls:null,props:[]};
 const $=s=>document.querySelector(s);
 const $V=()=>document.getElementById('sub')||document.getElementById('view');
 const esc=s=>String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
@@ -370,7 +373,7 @@ const subBiz=(s,n)=>{let d=s;while(n>0){d=addDays(d,-1);if(isBiz(d))n--}return d
 const bizBetween=(a,b)=>{let n=0,d=a;while(d<=b){if(isBiz(d))n++;d=addDays(d,1)}return n};
 
 function toast(msg){const t=document.createElement('div');t.className='toast';t.textContent=msg;document.body.appendChild(t);setTimeout(()=>t.remove(),2800)}
-function caseOf(t){return S.cases.get(t.caseId)||(t.dealId&&S.deals?dealAsCase(t.dealId):null)||null}
+function caseOf(t){return S.cases.get(t.caseId)||null}
 function openTasks(){return [...S.tasks.values()].filter(t=>!t.done&&t.due)}
 function effortOf(t){return t.effort!==undefined&&t.effort!==''&&t.effort!==null?Math.max(0,+t.effort||0):(EFFORT[t.kind]??1)}
 /* work window: N office days ending the office day before the deadline (one day kept for review and filing) */
@@ -957,6 +960,7 @@ async function caseSheet(id,tab){
       <button type="button" data-act="status" data-id="${esc(id)}"><span>📝</span>עדכון סטטוס</button>
       <button type="button" data-act="newTask" data-id="${esc(id)}"><span>📅</span>משימה / מועד</button>
       <button type="button" data-act="multiTask" data-id="${esc(id)}"><span>🗂️</span>כמה משימות</button>
+      <button type="button" data-act="preSetup" data-id="${esc(id)}"><span>📑</span>הליכים מקדמיים</button>
       <button type="button" data-act="draftCase" data-id="${esc(id)}"><span>✎</span>נסח מסמך</button>
       <button type="button" data-act="editCase" data-id="${esc(id)}"><span>⚙️</span>פרטי התיק</button>
       ${isClosed(c)?`<button type="button" data-act="reopen" data-id="${esc(id)}"><span>↩</span>פתח מחדש</button>`:`<button type="button" class="danger" data-act="closeCase" data-id="${esc(id)}"><span>🔒</span>סגירת תיק</button>`}
@@ -964,6 +968,7 @@ async function caseSheet(id,tab){
     <div class="tiles">
       ${tile('המועד הבא',nx?`${esc(KINDS[nx.kind]?.l||'')} · ${fmt(nx.due)}<small class="${nx.due<today()?'tl':''}">${rel(dd(today(),nx.due))}</small>`:'<span class="tl">אין מועד — לקבוע</span>',nx&&nx.due<today()?'t-late':!nx?'t-warn':'')}
       ${tile('משימות פתוחות',`${open.length}${late?` <small class="tl">${late} באיחור</small>`:''}`)}
+      ${tile('הליכים מקדמיים',{off:'לא חל',unset:'<span class="muted">לא הוגדר</span>',done:'✓ הושלמו',late:'<span class="tl">יש באיחור</span>',open:`${PRE.filter(x=>!preOpen(c,x)).length} מתוך ${PRE.length}`}[preState(c)])}
       ${tile('אחראי',esc(c.owner))}
       ${tile('אנו מייצגים',esc(c.side))}
       ${tile('תיק משרד',esc(c.fileNo))}
@@ -1006,7 +1011,7 @@ ${styles?`\nדוגמאות למסמכים שהמשרד כתב בעבר. למד �
 6. בסוף, אחרי שורת קווים, כתוב "נקודות לבדיקת עורך הדין": עד 8 שורות קצרות על מה שחסר, מה צריך לאמת, ומה הסיכונים.`;
 }
 async function draftSheet(taskId,caseId){
-  const t=taskId?S.tasks.get(taskId):null,c=S.cases.get(caseId||t?.caseId)||(t?.dealId?dealAsCase(t.dealId):S.deals.has(caseId)?dealAsCase(caseId):null);if(!c)return;
+  const t=taskId?S.tasks.get(taskId):null,c=S.cases.get(caseId||t?.caseId);if(!c)return;
   const key=taskId||('case-'+c.id);let saved=null;
   const [docs,styles]=await Promise.all([caseDocs(c.id),styleDocs()]);
   try{const d=await S.db.doc('drafts/'+key).get();if(d.exists)saved=d.data()}catch(e){}
@@ -1074,11 +1079,11 @@ function renderHelp(){
     <li>העתיקו את התשובה, הדביקו בתיבת הטיוטה ולחצו <b>שמור טיוטה בתיק</b>. משם: <b>העתק להדבקה ב-Word</b>.</li>
     <li>אחרי שעורך הדין תיקן טיוטה טובה, לחצו <b>הוסף לדוגמאות הסגנון</b>. כך הטיוטות הבאות ילמדו מהסגנון שלכם.</li></ol>
     <p class="note">שדות בסוגריים מרובעים [ ] דורשים השלמה. בסוף כל טיוטה יש רשימת נקודות לבדיקה. זו טיוטה בלבד, ועורך הדין בודק לפני הגשה.</p></div>
-  <div class="card"><h3>עסקאות מקרקעין</h3><ol>
-    <li>במסך <b>עסקאות מקרקעין</b> כל עסקה מופיעה עם השלבים שלה: טיוטה, חתימה, שיק בנקאי, ייפויי כוח, הערת אזהרה, דיווח למיסוי, אישורי מס, אישור עירייה, רמ"י, שטר מכר, טאבו ומסירת חזקה.</li>
-    <li>לחיצה על שלב בטבלה מסמנת אותו כבוצע עם התאריך של היום. לחיצה נוספת: לא רלוונטי. בכרטיס העסקה אפשר לבחור תאריך אחר.</li>
-    <li>כשמסמנים "ההסכם נחתם", נפתחת לבד משימה לדיווח לרשות המסים תוך 30 יום.</li>
-    <li>את גיליון "טיוטת חוזים" מהאקסל קולטים בכפתור "קליטה מאקסל".</li></ol></div>
+  <div class="card"><h3>הליכים מקדמיים</h3><ol>
+    <li>במסך <b>הליכים מקדמיים</b> כל תיק פתוח מופיע בשורה. לוחצים "להגדיר" ומזינים מתי הוגש כתב הטענות האחרון ומתי קדם המשפט הראשון.</li>
+    <li>המערכת מחשבת את המועדים לפי תקנות סדר הדין האזרחי, התשע"ט-2018 (30 ימים לדיון מקדמי, לגילוי מסמכים ולשאלון; 30 ימים למענה לשאלון ולעיון; 20 ימים לפני קדם המשפט לדיווח ולרשימת בקשות), בלי ימי פגרת הקיץ, ופותחת משימות.</li>
+    <li>לחיצה על שלב: מסמנים "בוצע", "לא נדרש" או "אחר", מצרפים את המסמך (הוא נשמר גם במסמכי התיק), ומעדכנים מועד אחר אם בית המשפט קבע בהחלטה.</li>
+    <li>תיק שההליכים המקדמיים לא חלים בו (למשל תביעה קטנה או ערעור): "תאריכים" ← "לא חלים בתיק הזה".</li></ol></div>
   <div class="card"><h3>עדכון מנט המשפט</h3><ol>
     <li>בלשונית <b>נט המשפט</b> גררו את הכפתור "שמור מנט המשפט" לסרגל הסימניות (פעם אחת בכל מחשב).</li>
     <li>היכנסו לנט המשפט עם הכרטיס החכם והקוד, כרגיל.</li>
@@ -1308,130 +1313,117 @@ async function renderSettings(){
   $('#admOut').addEventListener('click',async()=>{await fetch('/api/admin/logout',{method:'POST',credentials:'same-origin'});S.admin=null;markAdmin();render()});
 }
 
-/* ---------- real-estate deals: control table with a checklist of stages ---------- */
-const STAGES=[
-  ['draft','טיוטה נשלחה'],['signed','ההסכם נחתם'],['cheque','שיק בנקאי / תשלום'],['poa','ייפויי כוח'],
-  ['caveat','הערת אזהרה'],['tax','דיווח למיסוי'],['taxpaid','אישורי מס'],['city','אישור עירייה'],
-  ['ila','אישור רמ"י / חברה משכנת'],['deed','שטר מכר'],['tabu','רישום בטאבו'],['keys','מסירת חזקה']];
-const DEAL_TYPES=['מכר','רכישה','מתנה','שכירות','קומבינציה','פירוק שיתוף','משכנתא','אחר'];
-function dealAsCase(id){const d=S.deals.get(id);return d?{id:d.id,client:d.name,number:d.property||'',procType:'עסקה',owner:d.owner||'',isDeal:true}:null}
-function stageOf(d,k){return (d.stages||{})[k]||{}}
-function dealProgress(d){const rel=STAGES.filter(([k])=>stageOf(d,k).s!=='na');const done=rel.filter(([k])=>stageOf(d,k).s==='done').length;return{done,total:rel.length,next:rel.find(([k])=>stageOf(d,k).s!=='done')}}
-function dealTouched(d){return (d.statusAt||d.log?.[d.log.length-1]?.date||d.createdAt||'').slice(0,10)}
-function stagePills(d){return `<div class="stg">${STAGES.map(([k,l])=>{const st=stageOf(d,k);return `<button type="button" class="pill ${st.s||'todo'}" data-act="stage" data-id="${esc(d.id)}" data-k="${k}" title="${esc(l)}${st.s==='done'&&st.d?' — '+fmt(st.d):st.s==='na'?' — לא רלוונטי':' — טרם'}">${st.s==='done'?'✓':st.s==='na'?'–':''}<span>${esc(l)}</span></button>`}).join('')}</div>`}
-function renderDeals(){
-  const all=[...S.deals.values()],closedView=S.dealView==='done';
-  const active=all.filter(d=>d.status!=='הושלם'),done=all.filter(d=>d.status==='הושלם');
-  let list=closedView?done:active;const q=(S.dq||'').trim();
-  if(S.owner&&S.owner!=='__none')list=list.filter(d=>d.owner===S.owner);
-  if(q)list=list.filter(d=>[d.fileNo,d.name,d.property,d.otherLawyer,d.otherContact,d.ourSide,d.dealType,d.action,d.notes].join(' ').includes(q));
-  const stuck=d=>{const t=dealTouched(d);return !t||dd(t,today())>14};
-  const signed=d=>stageOf(d,'signed').s==='done';
-  if(!closedView&&S.dflt==='stuck')list=list.filter(stuck);
-  if(!closedView&&S.dflt==='signed')list=list.filter(signed);
-  if(!closedView&&S.dflt==='unsigned')list=list.filter(d=>!signed(d));
-  list.sort((a,b)=>dealTouched(a).localeCompare(dealTouched(b)));
-  const cnt={stuck:active.filter(stuck).length,signed:active.filter(signed).length,unsigned:active.filter(d=>!signed(d)).length};
-  $V().innerHTML=`<div class="row" style="margin-bottom:12px"><div class="seg" role="tablist"><button type="button" data-dv="active" aria-selected="${!closedView}">עסקאות פעילות (${active.length})</button><button type="button" data-dv="done" aria-selected="${closedView}">הושלמו (${done.length})</button></div>
-    ${S.canWrite?'<button class="btn" type="button" data-act="newDeal">+ עסקה חדשה</button>':''}<button class="btn ghost" type="button" data-act="dealImport">קליטה מאקסל</button></div>
-  ${closedView?'':`<div class="flt">${[['','כל הפעילות'],['unsigned','לפני חתימה'],['signed','אחרי חתימה'],['stuck','לא עודכנו 14+ יום']].map(([k,l])=>`<button type="button" data-dflt="${k}" aria-pressed="${(S.dflt||'')===k}">${l}${k?` <b>${cnt[k]}</b>`:''}</button>`).join('')}</div>`}
-  <div class="toolbar"><input type="search" id="dq" placeholder="חיפוש לפי שם, גוש/חלקה, עו&quot;ד הצד השני…" value="${esc(q)}">${ownerSelect('כל המשרד')}</div>
-  ${list.length?`<div class="tablewrap"><table class="ctl deals"><thead><tr><th>תיק</th><th>עסקה</th><th>הצד השני</th><th>שלבים <small class="muted">(לחצו על שלב לעדכון)</small></th><th>השלב הבא</th><th>פעולה לביצוע</th><th>אחראי</th><th>עודכן</th></tr></thead><tbody>${list.map(d=>{const p=dealProgress(d),t=dealTouched(d),ago=t?dd(t,today()):null;
-    return `<tr><td class="num"><a data-act="deal" data-id="${esc(d.id)}">${esc(d.fileNo)||'—'}</a></td>
-      <td><a data-act="deal" data-id="${esc(d.id)}"><b>${esc(d.name)}</b></a><br><span class="muted sm">${esc([d.dealType,d.property,d.ourSide&&('אנחנו: '+d.ourSide)].filter(Boolean).join(' · '))}</span></td>
-      <td>${esc(d.otherLawyer)||'<span class="muted">—</span>'}${d.otherContact?`<br><span class="muted sm" style="overflow-wrap:anywhere">${esc(d.otherContact)}</span>`:''}</td>
-      <td>${stagePills(d)}<div class="pbar"><i style="width:${p.total?Math.round(p.done/p.total*100):0}%"></i></div><span class="muted sm">${p.done} מתוך ${p.total}</span></td>
-      <td>${p.next?`<b>${esc(p.next[1])}</b>`:'<span class="chip ok">הכול בוצע</span>'}</td>
-      <td class="ed" ${S.canWrite?`data-dedit="action" data-id="${esc(d.id)}" title="לחצו לעריכה"`:''}><span class="clamp">${esc(d.action)||'<span class="muted">—</span>'}</span></td>
-      <td>${esc(d.owner)||'<span class="muted">—</span>'}</td>
-      <td class="num ${ago!==null&&ago>14?'tl':''}">${ago===null?'—':ago===0?'היום':`לפני ${ago} ימים`}</td></tr>`}).join('')}</tbody></table></div><p class="note">${list.length} עסקאות. כל לחיצה על שלב מחליפה אותו: טרם ← בוצע (עם התאריך של היום) ← לא רלוונטי ← טרם.</p>`
-   :`<div class="empty"><h3>${!S.loaded.deals?'טוען…':closedView?'אין עסקאות שהושלמו':'אין עסקאות פעילות'}</h3>${S.loaded.deals&&!closedView?'<p>הוסיפו עסקה חדשה, או קלטו את גיליון "טיוטת חוזים" מקובץ האקסל.</p>':''}</div>`}`;
-  $('#dq').addEventListener('input',e=>{S.dq=e.target.value;renderDeals();const n=$('#dq');n.focus();n.setSelectionRange(n.value.length,n.value.length)});
-  document.querySelectorAll('[data-dv]').forEach(b=>b.addEventListener('click',()=>{S.dealView=b.dataset.dv;renderDeals()}));
-  document.querySelectorAll('[data-dflt]').forEach(b=>b.addEventListener('click',()=>{S.dflt=b.dataset.dflt;renderDeals()}));
+/* ---------- preliminary procedures (Civil Procedure Regulations 2018): one row per open case ---------- */
+/* each step's deadline counts from a date entered for the case; the summer recess is skipped as with other filing deadlines */
+const PRE=[
+  {k:'meet',l:'דיון מקדמי בין הצדדים',s:'דיון מקדמי',from:'last',d:30,rule:'תוך 30 ימים מהמצאת כתב הטענות האחרון'},
+  {k:'disc',l:'תצהיר גילוי מסמכים',s:'גילוי מסמכים',from:'last',d:30,rule:'תקנה 57: לא יאוחר מ-30 ימים לאחר הגשת כתב הטענות האחרון'},
+  {k:'qSend',l:'שליחת שאלון לצד השני',s:'שאלון (שלנו)',from:'last',d:30,rule:'תקנה 56: לא יאוחר מ-30 ימים לאחר הגשת כתב הטענות האחרון'},
+  {k:'qAns',l:'מענה בתצהיר לשאלון שקיבלנו',s:'מענה לשאלון',from:'qIn',d:30,rule:'תקנה 56: תוך 30 ימים ממסירת השאלון'},
+  {k:'insp',l:'עיון במסמכים',s:'עיון',from:'discX',d:30,rule:'תקנה 58: עד 30 ימים לאחר החלפת תצהירי גילוי המסמכים'},
+  {k:'report',l:'דיווח לבית המשפט על הדיון המקדמי',s:'דיווח',from:'pre',d:-20,rule:'עד 20 ימים לפני ישיבת קדם המשפט הראשונה'},
+  {k:'reqs',l:'רשימת בקשות (כולל בקשות בעניין הליכים מקדמיים)',s:'רשימת בקשות',from:'pre',d:-20,rule:'עד 20 ימים לפני ישיבת קדם המשפט הראשונה'}];
+const PRE_FROM={last:'כתב הטענות האחרון',qIn:'קבלת השאלון',discX:'החלפת תצהירי הגילוי',pre:'קדם המשפט הראשון'};
+const PRE_ST={'':'טרם',done:'בוצע',na:'לא נדרש',other:'אחר'};
+function preOf(c){return c.pre||{}}
+function preStep(c,k){return (preOf(c).steps||{})[k]||{}}
+function preBase(c,from){const p=preOf(c);return from==='discX'?(p.discX||(preStep(c,'disc').s==='done'?preStep(c,'disc').d:'')):p[from]||''}
+function preDue(c,st){
+  const own=preStep(c,st.k);if(own.due)return own.due;
+  const b=preBase(c,st.from);if(!b)return'';
+  if(st.d>0)return calcDue(b,st.d,true).due;
+  let d=addDays(b,st.d);while([5,6].includes(pISO(d).getDay()))d=addDays(d,-1);return d;
 }
-async function saveDeal(id,d){
-  const now=new Date().toISOString();
-  try{if(id){await S.db.doc('deals/'+id).update({...d,updatedAt:now});return id}
-    const ref=S.db.collection('deals').doc();await ref.set({status:'פעיל',stages:{},log:[],...d,createdAt:now,updatedAt:now});return ref.id}catch(e){writeErr(e)}
+function preOpen(c,st){const x=preStep(c,st.k).s;return !x||x==='other'}
+function preState(c){
+  const p=preOf(c);if(p.off)return'off';if(!p.last&&!p.pre)return'unset';
+  const open=PRE.filter(st=>preOpen(c,st));if(!open.length)return'done';
+  return open.some(st=>{const d=preDue(c,st);return d&&d<today()})?'late':'open';
 }
-async function dealLog(id,text,extra={}){const d=S.deals.get(id);if(!d)return;await saveDeal(id,{log:[...(d.log||[]),{date:today(),text,by:S.me?.name||''}].slice(-300),statusAt:today(),...extra})}
-async function setStage(id,k,next){
-  const d=S.deals.get(id);if(!d||!S.canWrite)return;const label=STAGES.find(x=>x[0]===k)[1],was=stageOf(d,k);
-  const stages={...(d.stages||{}),[k]:next};
-  await dealLog(id,next.s==='done'?(was.s==='done'?`עודכן תאריך: ${label}`:`בוצע: ${label}`):next.s==='na'?`סומן כלא רלוונטי: ${label}`:`בוטל הסימון: ${label}`,{stages});
-  /* signing starts the tax-report clock: a declaration is due 30 days after the deal */
-  if(k==='signed'&&next.s==='done'&&was.s!=='done'&&stageOf(d,'tax').s!=='done'&&!openTasks().some(t=>t.dealId===id&&/מיסוי|רשות המסים/.test(t.title||''))){
-    let due=addDays(next.d||today(),30);while([5,6].includes(pISO(due).getDay()))due=addDays(due,1);
-    await saveTask(null,{dealId:id,caseId:'',kind:'submission',title:'דיווח לרשות המסים (מיסוי מקרקעין)',due,time:'',assignee:d.owner||'',effort:2,source:'עסקה',note:'הצהרה למיסוי מקרקעין תוך 30 יום מיום החתימה. לאמת את המועד.'});
-    toast('נפתחה משימה: דיווח למיסוי תוך 30 יום');
+function prePills(c){return `<div class="stg">${PRE.map(st=>{const x=preStep(c,st.k),due=preDue(c,st),late=preOpen(c,st)&&due&&due<today();
+  return `<button type="button" class="pill ${x.s==='done'?'done':x.s==='na'?'na':late?'late':'todo'}" data-act="preStep" data-id="${esc(c.id)}" data-k="${st.k}" title="${esc(st.l)} — ${esc(PRE_ST[x.s||''])}${x.s==='done'&&x.d?' '+fmt(x.d):due&&preOpen(c,st)?' · עד '+fmt(due):''}">${x.s==='done'?'✓':x.s==='na'?'–':late?'!':''}<span>${esc(st.s)}</span>${preOpen(c,st)&&due?`<small>${esc(fmt(due).replace(/^יום \S+ /,''))}</small>`:''}${x.docId?'<i aria-label="יש מסמך">📎</i>':''}</button>`}).join('')}</div>`}
+function renderPre(){
+  const all=[...S.cases.values()].filter(c=>!isClosed(c));
+  const cnt={};all.forEach(c=>{const s=preState(c);cnt[s]=(cnt[s]||0)+1});
+  const f=S.preFlt||'';let list=all.filter(c=>!f?preState(c)!=='off':preState(c)===f);
+  if(S.owner)list=list.filter(c=>c.owner===S.owner);
+  const q=(S.pq||'').trim();if(q)list=list.filter(c=>[c.number,c.fileNo,c.title,c.client,c.owner].join(' ').includes(q));
+  const nextDue=c=>PRE.filter(st=>preOpen(c,st)).map(st=>preDue(c,st)).filter(Boolean).sort()[0]||'9999';
+  list.sort((a,b)=>nextDue(a).localeCompare(nextDue(b)));
+  const pt=openTasks().filter(t=>t.preStep||t.kind==="discovery").filter(mine).sort((a,b)=>a.due.localeCompare(b.due));
+  $V().innerHTML=`<div class="banner" style="margin:0 0 14px;background:var(--soon-bg)"><span>לכל תיק פתוח: מתי הוגש כתב הטענות האחרון ומתי קדם המשפט. המערכת מחשבת את המועדים לפי תקנות סדר הדין האזרחי, התשע"ט-2018, ופותחת משימות. לחיצה על שלב: סימון בוצע / לא נדרש וצירוף המסמך.</span></div>
+  <div class="flt">${[['','כל התיקים'],['unset','עוד לא הוגדר'],['late','יש באיחור'],['open','בתהליך'],['done','הושלמו'],['off','לא חל בתיק']].map(([k,l])=>`<button type="button" data-preflt="${k}" aria-pressed="${f===k}">${l}${k?` <b>${cnt[k]||0}</b>`:''}</button>`).join('')}</div>
+  <div class="toolbar"><input type="search" id="pq" placeholder="חיפוש לפי לקוח או מספר תיק…" value="${esc(q)}">${S.admin?ownerSelect('כל עורכי הדין'):''}</div>
+  ${list.length?`<div class="tablewrap"><table class="ctl prelim"><thead><tr><th>תיק</th><th>כתב טענות אחרון</th><th>קדם משפט</th><th>שלבים <small class="muted">(לחצו על שלב)</small></th><th>הבא בתור</th><th>אחראי</th></tr></thead><tbody>${list.map(c=>{const p=preOf(c),st=preState(c),nx=PRE.filter(x=>preOpen(c,x)).map(x=>({x,d:preDue(c,x)})).sort((a,b)=>(a.d||'9999').localeCompare(b.d||'9999'))[0];
+    return `<tr><td><a data-act="case" data-id="${esc(c.id)}"><b>${esc(caseLabel(c))}</b></a><br><span class="muted sm">${esc([c.procType,c.number].filter(Boolean).join(' '))}</span></td>
+      <td class="num">${p.last?fmt(p.last):`<button class="btn ghost sm" type="button" data-act="preSetup" data-id="${esc(c.id)}">להגדיר</button>`}</td>
+      <td class="num">${p.pre?fmt(p.pre):'<span class="muted">—</span>'}</td>
+      <td>${st==='off'?`<span class="chip">לא חל בתיק</span>${p.offWhy?` <span class="muted sm">${esc(p.offWhy)}</span>`:''}`:st==='unset'?'<span class="muted">הזינו תאריכים כדי לחשב מועדים</span>':prePills(c)}</td>
+      <td>${st==='done'?'<span class="chip ok">הושלם</span>':nx&&st!=='off'&&st!=='unset'?`<b>${esc(nx.x.s)}</b>${nx.d?`<br><span class="sm ${nx.d<today()?'tl':'muted'}">${fmt(nx.d)}</span>`:''}`:''}<div><button class="btn ghost sm" type="button" data-act="preSetup" data-id="${esc(c.id)}">✏️ תאריכים</button></div></td>
+      <td>${esc(c.owner)||'<span class="muted">—</span>'}</td></tr>`}).join('')}</tbody></table></div>`
+    :`<div class="empty"><h3>${!S.loaded.cases?'טוען…':'אין תיקים בסינון הזה'}</h3></div>`}
+  <h3 class="sect" style="margin-top:22px">${S.admin?'משימות הליכים מקדמיים פתוחות':'משימות הליכים מקדמיים שלי'}</h3>
+  ${pt.length?cardGrid(pt,{mode:'upcoming'}):'<p class="muted">אין משימות פתוחות.</p>'}
+  <p class="note">המועדים הם ברירת המחדל לפי התקנות. כשבית המשפט קבע מועד אחר בהחלטה, פתחו את השלב ועדכנו "מועד שנקבע בהחלטה". מומלץ לאמת כל מועד מול ההחלטות בתיק.</p>`;
+  document.querySelectorAll('[data-preflt]').forEach(b=>b.addEventListener('click',()=>{S.preFlt=b.dataset.preflt;renderPre()}));
+  $('#pq').addEventListener('input',e=>{S.pq=e.target.value;renderPre();const n=$('#pq');n.focus();n.setSelectionRange(n.value.length,n.value.length)});
+}
+/* creates or updates the task for each step that is still open; closes tasks of steps that were done or not needed.
+   the case keeps the task ids, so an employee who cannot see a colleague's task does not open a duplicate */
+async function preSyncTasks(c){
+  const ids={...(preOf(c).tasks||{})};let n=0;
+  const upd=async(id,d)=>{try{await S.db.doc('tasks/'+id).update({...d,updatedAt:new Date().toISOString()})}catch(e){}};
+  for(const st of PRE){
+    const due=preDue(c,st),known=ids[st.k],t=known?S.tasks.get(known):[...S.tasks.values()].find(t=>t.caseId===c.id&&t.preStep===st.k);
+    if(preOpen(c,st)&&due&&!preOf(c).off){
+      if(!known&&!t){const ref=S.db.collection('tasks').doc();const now=new Date().toISOString();
+        try{await ref.set({caseId:c.id,preStep:st.k,kind:'discovery',title:st.l,due,time:'',done:false,assignee:S.admin?c.owner||'':S.me?.name||'',effort:st.k==='qAns'||st.k==='disc'?3:1,note:st.rule,source:'הליכים מקדמיים',verify:false,createdAt:now,updatedAt:now});ids[st.k]=ref.id;n++}catch(e){writeErr(e)}}
+      else{const id=known||t.id;ids[st.k]=id;if(!t||t.due!==due||t.done)await upd(id,{due,done:false})}
+    }else if(known||t){const id=known||t.id;if(!t||!t.done)await upd(id,{done:true,doneAt:today()})}
   }
+  if(JSON.stringify(ids)!==JSON.stringify(preOf(c).tasks||{}))await saveCase(c.id,{pre:{...preOf(c),tasks:ids}});
+  await S.db.refresh('tasks').catch(()=>{});return n;
 }
-function cycleStage(id,k){const d=S.deals.get(id);if(!d)return;const st=stageOf(d,k);return setStage(id,k,st.s==='done'?{s:'na'}:st.s==='na'?{}:{s:'done',d:today()})}
-function dealForm(d){
-  d=d||{};const v=k=>esc(d[k]||'');
-  sheet(`<h2>${d.id?'עריכת עסקה':'עסקה חדשה'}</h2><form id="dfm" class="grid2">
-    <label class="f"><span>שם העסקה / הלקוח</span><input type="text" name="name" value="${v('name')}" required></label>
-    <label class="f"><span>תיק משרד</span><input type="text" name="fileNo" value="${v('fileNo')}"></label>
-    <label class="f"><span>סוג ההסכם</span><select name="dealType">${DEAL_TYPES.map(t=>`<option ${d.dealType===t?'selected':''}>${t}</option>`).join('')}</select></label>
-    <label class="f"><span>הנכס (גוש / חלקה / תת חלקה, כתובת)</span><input type="text" name="property" value="${v('property')}" placeholder="6372/104"></label>
-    <label class="f"><span>הצד שלנו</span><input type="text" name="ourSide" value="${v('ourSide')}" placeholder="המוכרים"></label>
-    <label class="f"><span>מחיר העסקה (לא חובה)</span><input type="text" name="price" value="${v('price')}" inputmode="numeric"></label>
-    <label class="f"><span>עו"ד הצד השני</span><input type="text" name="otherLawyer" value="${v('otherLawyer')}"></label>
-    <label class="f"><span>פרטי התקשרות</span><input type="text" name="otherContact" value="${v('otherContact')}" placeholder="טלפון / מייל"></label>
-    <label class="f"><span>אחראי במשרד</span><select name="owner"><option value="">—</option>${(S.people||[]).map(p=>`<option ${p===d.owner?'selected':''}>${esc(p)}</option>`).join('')}</select></label>
-    <label class="f"><span>פעולה לביצוע</span><input type="text" name="action" value="${v('action')}"></label>
-    <label class="f" style="grid-column:1/-1"><span>הערות</span><textarea name="notes" style="min-height:70px">${v('notes')}</textarea></label>
-    <div class="actions" style="grid-column:1/-1"><button class="btn" type="submit">שמור</button><button class="btn ghost" type="button" data-close>ביטול</button></div></form>`,
-  o=>o.querySelector('#dfm').addEventListener('submit',async e=>{e.preventDefault();const x=Object.fromEntries(new FormData(e.target));await saveDeal(d.id,{...x,statusAt:today()});o.remove();toast('העסקה נשמרה')}));
+function preSetup(id){
+  const c=S.cases.get(id);if(!c)return;const p=preOf(c);
+  sheet(`<h2>הליכים מקדמיים — ${esc(caseLabel(c))}</h2><p class="muted">${esc([c.procType,c.number].filter(Boolean).join(' '))}</p>
+    <form id="psf" class="grid2">
+      <label class="f"><span>מועד המצאת / הגשת כתב הטענות האחרון</span><input type="date" name="last" value="${esc(p.last||'')}"></label>
+      <label class="f"><span>ישיבת קדם המשפט הראשונה</span><input type="date" name="pre" value="${esc(p.pre||'')}"></label>
+      <label class="f"><span>קיבלנו שאלון מהצד השני ביום (לא חובה)</span><input type="date" name="qIn" value="${esc(p.qIn||'')}"></label>
+      <label class="f"><span>הוחלפו תצהירי גילוי מסמכים ביום (לא חובה)</span><input type="date" name="discX" value="${esc(p.discX||'')}"></label>
+      <label class="row" style="grid-column:1/-1"><input type="checkbox" name="off" ${p.off?'checked':''}> ההליכים המקדמיים לא חלים בתיק הזה</label>
+      <label class="f" style="grid-column:1/-1"><span>למה לא חל? (למשל: תביעה קטנה, ערעור, הליך שהסתיים)</span><input type="text" name="offWhy" value="${esc(p.offWhy||'')}"></label>
+      <label class="row" style="grid-column:1/-1"><input type="checkbox" name="mk" checked> לפתוח משימות עם המועדים לפי התקנות</label>
+      <div class="actions" style="grid-column:1/-1"><button class="btn" type="submit">שמור</button><button class="btn ghost" type="button" data-close>ביטול</button></div></form>`,
+  o=>o.querySelector('#psf').addEventListener('submit',async e=>{e.preventDefault();const d=Object.fromEntries(new FormData(e.target));
+    const pre={...p,last:d.last,pre:d.pre,qIn:d.qIn,discX:d.discX,off:!!d.off,offWhy:d.off?d.offWhy.trim():''};
+    await saveCase(id,{pre});const c2={...c,pre};let n=0;if(d.mk||pre.off)n=await preSyncTasks(c2);
+    o.remove();toast(pre.off?'סומן: הליכים מקדמיים לא חלים':n?`נשמר. נפתחו ${n} משימות`:'נשמר');render()}));
 }
-function dealSheet(id){
-  const d=S.deals.get(id);if(!d)return;const p=dealProgress(d);
-  const ts=[...S.tasks.values()].filter(t=>t.dealId===id).sort((a,b)=>(a.done-b.done)||a.due.localeCompare(b.due));
-  sheet(`<div class="row" style="justify-content:space-between"><h2>${esc(d.name)}</h2><span class="chip ${d.status==='הושלם'?'ok':''}">${esc(d.status||'פעיל')}</span></div>
-    <dl class="kv"><dt>תיק משרד</dt><dd>${esc(d.fileNo)}</dd><dt>סוג</dt><dd>${esc(d.dealType)}</dd><dt>נכס</dt><dd>${esc(d.property)}</dd><dt>הצד שלנו</dt><dd>${esc(d.ourSide)}</dd><dt>עו"ד הצד השני</dt><dd>${esc(d.otherLawyer)}</dd><dt>פרטי התקשרות</dt><dd style="overflow-wrap:anywhere">${esc(d.otherContact)}</dd>${d.price?`<dt>מחיר</dt><dd>${esc(d.price)}</dd>`:''}<dt>אחראי</dt><dd>${esc(d.owner)}</dd>${d.notes?`<dt>הערות</dt><dd>${esc(d.notes)}</dd>`:''}</dl>
-    <h3>שלבי העסקה <small class="muted">${p.done} מתוך ${p.total}</small></h3>
-    <ul class="docs">${STAGES.map(([k,l])=>{const st=stageOf(d,k);return `<li><span class="nm"><b>${esc(l)}</b> ${st.s==='done'?`<span class="chip ok">בוצע${st.d?' '+fmt(st.d):''}</span>`:st.s==='na'?'<span class="chip">לא רלוונטי</span>':'<span class="chip prep">טרם</span>'}</span>${S.canWrite?`<input type="date" class="stDate" data-k="${k}" value="${esc(st.s==='done'?st.d||'':'')}" aria-label="תאריך ${esc(l)}" style="width:auto"><button class="btn sm" type="button" data-act="stageSet" data-id="${esc(id)}" data-k="${k}" data-to="done">${st.s==='done'?'עדכן':'בוצע'}</button><button class="btn ghost sm" type="button" data-act="stageSet" data-id="${esc(id)}" data-k="${k}" data-to="${st.s==='na'?'':'na'}">${st.s==='na'?'החזר':'לא רלוונטי'}</button>`:''}</li>`}).join('')}</ul>
-    <div class="actions">${S.canWrite?`<button class="btn" type="button" data-act="dealStatus" data-id="${esc(id)}">עדכון סטטוס</button><button class="btn ghost" type="button" data-act="newDealTask" data-id="${esc(id)}">+ משימה / מועד</button><button class="btn ghost" type="button" data-act="editDeal" data-id="${esc(id)}">ערוך פרטים</button>${d.status==='הושלם'?`<button class="btn ghost" type="button" data-act="dealReopen" data-id="${esc(id)}">פתח מחדש</button>`:`<button class="btn danger" type="button" data-act="dealDone" data-id="${esc(id)}">סמן כהושלמה</button>`}`:''}<button class="btn ghost" type="button" data-close>סגור</button></div>
-    <h3>משימות</h3>${ts.length?cardGrid(ts,{showCase:false,mode:'upcoming'}):'<p class="muted">אין משימות בעסקה.</p>'}
-    <h3>יומן העסקה</h3>${(d.log||[]).length?`<ul class="docs">${[...d.log].reverse().map(l=>`<li><span class="num muted" style="min-width:80px">${fmt(l.date)}</span><span class="nm">${esc(l.text)}</span><span class="muted sm">${esc(l.by||'')}</span></li>`).join('')}</ul>`:'<p class="muted">עדיין אין עדכונים.</p>'}
-    <h3>מסמכים</h3><div id="docList"><p class="muted">טוען…</p></div>
-    ${S.canWrite?`<div class="drop" id="docDrop"><p>גררו לכאן טיוטות, הסכם חתום, שטר מכר, אישורים (PDF או Word), או <label class="btn ghost sm">בחרו קבצים<input type="file" multiple accept=".pdf,.docx,.txt" hidden></label></p><p class="note" id="docStat"></p></div>`:''}`,
-  o=>{const st=o.querySelector('#docStat');
-    dropZone(o,'#docDrop',async files=>{let ok=0;for(const f of files){st.textContent=`קורא את ${f.name}…`;try{const data=await ingest(f,{caseId:id,kind:guessDocKind(f.name),docDate:''});await S.db.collection('docs').doc().set(data);ok++}catch(e){toast(f.name+': '+e.message)}}st.textContent=ok?`נשמרו ${ok} מסמכים.`:'';refresh()});
-    async function refresh(){const docs=await caseDocs(id);o._docs=docs;const el=o.querySelector('#docList');if(el)el.innerHTML=docListHTML(docs)}o._refresh=refresh;refresh()});
-}
-function dealStatusSheet(id){
-  const d=S.deals.get(id);if(!d)return;
-  sheet(`<h2>עדכון — ${esc(d.name)}</h2><form id="dsf" class="grid2"><label class="f" style="grid-column:1/-1"><span>מה קרה</span><textarea name="text" required style="min-height:80px" placeholder="למשל: נשלחה טיוטה שנייה לעו&quot;ד הקונים. ממתינים להערות."></textarea></label>
-    <label class="f" style="grid-column:1/-1"><span>פעולה לביצוע</span><input type="text" name="action" value="${esc(d.action||'')}"></label>
-    <div class="actions" style="grid-column:1/-1"><button class="btn" type="submit">שמור</button><button class="btn ghost" type="button" data-close>ביטול</button></div></form>`,
-  o=>o.querySelector('#dsf').addEventListener('submit',async e=>{e.preventDefault();const x=Object.fromEntries(new FormData(e.target));await dealLog(id,x.text.trim(),{action:x.action.trim()});o.remove();toast('עודכן')}));
-}
-/* import the "טיוטת חוזים" sheet of the office Excel */
-function dealImportSheet(){
-  sheet(`<h2>קליטת עסקאות מאקסל</h2><p class="muted">בחרו את קובץ האקסל של המשרד. המערכת מחפשת גיליון של חוזים (למשל "טיוטת חוזים") ומזהה את העמודות: מס' תיק, שם התיק, סוג הסכם, גוש/חלקה, הצד שלנו, עו"ד הצד שכנגד, פרטי התקשרות, טיוטה אחרונה, הערות, בטיפול, פעולות לביצוע.</p>
-    <input type="file" id="dxf" accept=".xlsx,.xls"><div id="dxOut"></div><div class="actions"><button class="btn ghost" type="button" data-close>סגור</button></div>`,
-  o=>o.querySelector('#dxf').addEventListener('change',async e=>{const f=e.target.files[0];if(!f)return;const out=o.querySelector('#dxOut');
-    try{const wb=XLSX.read(await f.arrayBuffer(),{type:'array'});const name=wb.SheetNames.find(n=>/חוז|הסכם|עסק/.test(n))||wb.SheetNames[0];
-      const rows=XLSX.utils.sheet_to_json(wb.Sheets[name],{header:1,raw:true,defval:''});const hi=rows.findIndex(r=>r.filter(c=>String(c).trim()&&isNaN(c)).length>=3);
-      const head=rows[hi].map(c=>String(c).trim());const col=re=>head.findIndex(h=>re.test(h));
-      const M={fileNo:col(/תיק שלנו|מס' תיק/),name:col(/שם התיק/),dealType:col(/סוג הסכם|סוג/),property:col(/גוש|חלקה/),ourSide:col(/הצד שלנו/),otherLawyer:col(/עו"ד הצד|הצד שכנגד/),otherContact:col(/התקשרות/),draft:col(/טיוטה/),notes:col(/הערות/),owner:col(/בטיפול/),action:col(/פעולות|לביצוע/)};
-      const data=rows.slice(hi+1).filter(r=>M.name>=0&&String(r[M.name]).trim());
-      out.innerHTML=`<p>בגיליון "<b>${esc(name)}</b>" נמצאו <b>${data.length}</b> עסקאות.</p><button class="btn" type="button" id="dxGo">קלוט ${data.length} עסקאות</button><p class="note" id="dxSt"></p>`;
-      o.querySelector('#dxGo').addEventListener('click',async ev=>{ev.target.disabled=true;let n=0,skip=0;const g=(r,k)=>M[k]>=0?String(r[M[k]]??'').trim():'';
-        for(const r of data){const x={fileNo:g(r,'fileNo'),name:g(r,'name'),dealType:g(r,'dealType')||'מכר',property:g(r,'property'),ourSide:g(r,'ourSide'),otherLawyer:g(r,'otherLawyer'),otherContact:g(r,'otherContact'),notes:g(r,'notes'),owner:g(r,'owner'),action:g(r,'action')};
-          if([...S.deals.values()].some(d=>d.name===x.name&&d.ourSide===x.ourSide&&d.property===x.property)){skip++;continue}
-          const dt=M.draft>=0?cellDate(r[M.draft]):null;
-          await saveDeal(null,{...x,stages:dt?{draft:{s:'done',d:dt}}:{},log:dt?[{date:dt,text:'טיוטה אחרונה (מהאקסל)',by:''}]:[],statusAt:dt||today(),source:'אקסל'});n++;o.querySelector('#dxSt').textContent=`${n} עסקאות…`}
-        o.querySelector('#dxSt').textContent=`נקלטו ${n} עסקאות.${skip?` ${skip} כבר היו במערכת ולא שוכפלו.`:''}`;toast('הקליטה הסתיימה')});
-    }catch(err){out.innerHTML='<p class="note" style="color:var(--late)">הקובץ לא נקרא. ודאו שזה קובץ אקסל תקין.</p>'}}));
-}
-function startDealEdit(td){
-  if(td.querySelector('input'))return;const id=td.dataset.id,k=td.dataset.dedit,d=S.deals.get(id);if(!d)return;
-  td.innerHTML=`<input type="text" value="${esc(d[k]||'')}" style="min-width:140px">`;const inp=td.querySelector('input');inp.focus();inp.select();S.editing=true;
-  let fin=false;const end=async save=>{if(fin)return;fin=true;S.editing=false;if(save&&inp.value.trim()!==(d[k]||''))await saveDeal(id,{[k]:inp.value.trim(),statusAt:today()});else renderDeals()};
-  inp.addEventListener('keydown',e=>{if(e.key==='Enter')end(true);if(e.key==='Escape'){e.stopPropagation();end(false)}});inp.addEventListener('blur',()=>end(true));
+function preStepSheet(id,k){
+  const c=S.cases.get(id);if(!c)return;const st=PRE.find(x=>x.k===k),x=preStep(c,k),due=preDue(c,st);
+  sheet(`<h2>${esc(st.l)}</h2><p class="muted">${esc(caseLabel(c))} · ${esc(st.rule)}</p>
+    <div class="tile wide"><span>המועד לפי התקנות</span><b>${due&&!x.due?fmt(due):x.due?fmt(x.due)+' (נקבע בהחלטה)':`<span class="muted">חסר תאריך: ${esc(PRE_FROM[st.from])}</span>`}</b></div>
+    <form id="pst" class="grid2">
+      <div class="f" style="grid-column:1/-1"><span>מה המצב?</span><div class="seg">${Object.entries(PRE_ST).map(([v,l])=>`<label class="opt"><input type="radio" name="s" value="${v}" ${(x.s||'')===v?'checked':''}> ${l}</label>`).join('')}</div></div>
+      <label class="f"><span>בוצע בתאריך</span><input type="date" name="d" value="${esc(x.d||today())}"></label>
+      <label class="f"><span>מועד שנקבע בהחלטה (במקום התקנות)</span><input type="date" name="due" value="${esc(x.due||'')}"></label>
+      <label class="f" style="grid-column:1/-1"><span>הערה</span><input type="text" name="note" value="${esc(x.note||'')}" placeholder="למשל: הוסכם על ארכה עד…, הצד השני לא השיב"></label>
+      <div class="f" style="grid-column:1/-1"><span>המסמך</span>${x.docId?`<div class="row"><span class="chip">📎 ${esc(x.docName||'מסמך')}</span><button class="btn ghost sm" type="button" data-act="viewDoc" data-id="${esc(x.docId)}">הצג</button></div>`:''}
+        <div class="drop" id="preDrop"><p>גררו לכאן את המסמך (PDF או Word), או <label class="btn ghost sm">בחרו קובץ<input type="file" accept=".pdf,.docx,.txt" hidden></label></p><p class="note" id="preSt" aria-live="polite">המסמך נשמר גם במסמכי התיק.</p></div></div>
+      <div class="actions" style="grid-column:1/-1"><button class="btn" type="submit">שמור</button><button class="btn ghost" type="button" data-close>ביטול</button></div></form>`,
+  o=>{caseDocs(id).then(d=>{o._docs=d});let doc=x.docId?{id:x.docId,name:x.docName}:null;const stx=o.querySelector('#preSt');
+    dropZone(o,'#preDrop',async files=>{const f=files[0];if(!f)return;stx.textContent=`קורא את ${f.name}…`;
+      try{const data=await ingest(f,{caseId:id,kind:'הליכים מקדמיים',docDate:today()});const ref=S.db.collection('docs').doc();await ref.set(data);doc={id:ref.id,name:data.name};stx.textContent=`נשמר: ${data.name}`;
+        const r=o.querySelector('[name=s][value=done]');if(r&&!o.querySelector('[name=s]:checked')?.value)r.checked=true}catch(e){stx.textContent=f.name+': '+e.message}});
+    o.querySelector('#pst').addEventListener('submit',async e=>{e.preventDefault();const d=Object.fromEntries(new FormData(e.target));
+      const step={s:d.s||'',d:d.s==='done'?d.d:'',due:d.due||'',note:d.note.trim(),docId:doc?.id||'',docName:doc?.name||''};
+      const p=preOf(c),pre={...p,steps:{...(p.steps||{}),[k]:step}};
+      if(k==='disc'&&step.s==='done'&&!p.discX)pre.discX=step.d;
+      await saveCase(id,{pre});await preSyncTasks({...c,pre});
+      if(step.s!==(x.s||''))await addLog(id,`הליכים מקדמיים: ${st.l} — ${PRE_ST[step.s]}${step.d?' ('+fmt(step.d)+')':''}${step.note?'. '+step.note:''}`);
+      o.remove();toast('נשמר');render()})});
 }
 
 /* ---------- writes ---------- */
@@ -1464,7 +1456,7 @@ function briefText(){
 const IC={
   today:'<path d="M12 3v2M12 19v2M4.2 4.2l1.4 1.4M18.4 18.4l1.4 1.4M3 12h2M19 12h2M4.2 19.8l1.4-1.4M18.4 5.6l1.4-1.4" stroke="currentColor" stroke-width="2" stroke-linecap="round" fill="none"/><circle cx="12" cy="12" r="4" fill="currentColor"/>',
   cal:'<rect x="3" y="5" width="18" height="16" rx="2" stroke="currentColor" stroke-width="2" fill="none"/><path d="M3 10h18M8 3v4M16 3v4" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>',
-  deals:'<path d="M4 10l8-6 8 6v9a1 1 0 0 1-1 1h-5v-6h-4v6H5a1 1 0 0 1-1-1z" stroke="currentColor" stroke-width="2" fill="none" stroke-linejoin="round"/>',
+  pre:'<path d="M7 3h7l5 5v13H7z" stroke="currentColor" stroke-width="2" fill="none" stroke-linejoin="round"/><path d="M10 13l2 2 4-4" stroke="currentColor" stroke-width="2" fill="none" stroke-linecap="round"/>',
   cases:'<path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v9a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z" stroke="currentColor" stroke-width="2" fill="none"/>',
   tasks:'<path d="M9 6h11M9 12h11M9 18h11" stroke="currentColor" stroke-width="2" stroke-linecap="round"/><path d="M4 6l1 1 2-2M4 12l1 1 2-2M4 18l1 1 2-2" stroke="currentColor" stroke-width="1.8" fill="none" stroke-linecap="round"/>',
   nh:'<path d="M12 3l8 4v2H4V7z M5 10v8M9.5 10v8M14.5 10v8M19 10v8M3 20h18" stroke="currentColor" stroke-width="2" fill="none" stroke-linejoin="round"/>',
@@ -1474,7 +1466,7 @@ const IC={
 const VIEWS={
   today:{t:'היום שלי',d:'מה דחוף, על מה כדאי לעבוד היום, ומה מתקרב. מתחילים מכאן כל בוקר.'},
   cal:{t:'יומן',d:'שלושה שבועות קדימה: דיונים, מועדי הגשה, והימים שהמערכת שריינה לעבודה על כל מסמך.'},
-  deals:{t:'עסקאות מקרקעין',d:'הסכמי מכר ורכישה: מי הצד השני, ובאיזה שלב כל עסקה, מהטיוטה ועד רישום בטאבו ומסירת חזקה.'},
+  pre:{t:'הליכים מקדמיים',d:'לכל תיק: דיון מקדמי, גילוי מסמכים, עיון, שאלונים, דיווח ורשימת בקשות. המועדים מחושבים לפי תקנות סדר הדין האזרחי, ולכל שלב אפשר לצרף את המסמך או לסמן "לא נדרש".'},
   cases:{t:'התיקים',d:'טבלת השליטה של המשרד: כל תיק פתוח עם הסטטוס האחרון, הפעולה הבאה והמועד הבא. תיקים שהסתיימו עוברים ל"תיקים סגורים".'},
   tasks:{t:'כל המשימות',d:'רשימה מלאה של כל המועדים והמשימות, לפי תאריך.'},
   nh:{t:'נט המשפט',d:'כאן נכנסות ההחלטות והמועדים מנט המשפט: בכפתור בסרגל הסימניות, או בהדבקת טקסט.'},
@@ -1500,7 +1492,7 @@ function render(){
   if(subs){S.sub=S.sub||{};const cur=S.sub[S.view]||subs[0][0];
     $('#view').innerHTML=`<div class="seg" role="tablist">${subs.map(([k,l])=>`<button type="button" data-sub="${k}" aria-selected="${k===cur}">${l}</button>`).join('')}</div><div id="sub"></div>`;
     (subs.find(x=>x[0]===cur)||subs[0])[2]();
-  }else{$('#view').innerHTML='';({today:renderToday,cal:renderCal,cases:renderCases,deals:renderDeals,tasks:renderTasks}[S.view])()}
+  }else{$('#view').innerHTML='';({today:renderToday,cal:renderCal,cases:renderCases,pre:renderPre,tasks:renderTasks}[S.view])()}
 }
 function go(v){S.view=v;try{localStorage.setItem('cb.view',v)}catch(e){}render();window.scrollTo(0,0)}
 $('#tabs').addEventListener('click',e=>{const b=e.target.closest('button[data-v]');if(b)go(b.dataset.v)});
@@ -1511,7 +1503,6 @@ $('#copyBrief').addEventListener('click',async()=>{const txt=briefText();if(awai
 document.addEventListener('change',e=>{if(e.target.id==='ownerF'){S.owner=e.target.value;S.ownerSet=true;render()}if(e.target.id==='tStatus'){S.tStatus=e.target.value;render()}});
 document.addEventListener('click',async e=>{
   const ed=e.target.closest('td[data-edit]');if(ed){startEdit(ed);return}
-  const de=e.target.closest('td[data-dedit]');if(de){startDealEdit(de);return}
   const a=e.target.closest('[data-act]');if(!a)return;const id=a.dataset.id;
   const inCase=a.closest('.overlay')?.querySelector('.cs-head');if(inCase&&['status','newTask','editCase','editTask','draft','draftCase','closeCase','assign'].includes(a.dataset.act))S.returnTo=a.closest('.overlay')._caseId;
   const closeAll=()=>document.querySelectorAll('.overlay').forEach(o=>o.remove());
@@ -1520,18 +1511,9 @@ document.addEventListener('click',async e=>{
     case'status':closeAll();statusSheet(id);break;
     case'closeCase':closeAll();closeSheet(id);break;
     case'reopen':{const c=S.cases.get(id);if(c)await saveCase(id,{status:'פעיל',closeReason:'',closedAt:'',log:[...(c.log||[]),{date:today(),text:'התיק נפתח מחדש',by:S.me?.name||''}],statusAt:today()});closeAll();toast('התיק חזר לתיקים הפתוחים');break}
-    case'case':closeAll();if(S.deals.has(id))dealSheet(id);else caseSheet(id);break;
-    case'deal':closeAll();dealSheet(id);break;
-    case'newDeal':closeAll();dealForm();break;
-    case'editDeal':closeAll();dealForm(S.deals.get(id));break;
-    case'dealImport':closeAll();dealImportSheet();break;
-    case'dealStatus':closeAll();dealStatusSheet(id);break;
-    case'stage':await cycleStage(id,a.dataset.k);break;
-    case'stageSet':{const k=a.dataset.k,to=a.dataset.to,dt=a.closest('li')?.querySelector('.stDate')?.value||today();
-      await setStage(id,k,to==='done'?{s:'done',d:dt}:to==='na'?{s:'na'}:{});closeAll();dealSheet(id);break}
-    case'newDealTask':{closeAll();const d=S.deals.get(id);taskForm({dealId:id,caseId:'',kind:'internal',due:today(),assignee:d?.owner||''});break}
-    case'dealDone':await dealLog(id,'העסקה הושלמה',{status:'הושלם',doneAt:today()});closeAll();toast('העסקה עברה ל"הושלמו"');break;
-    case'dealReopen':await dealLog(id,'העסקה נפתחה מחדש',{status:'פעיל'});closeAll();break;
+    case'case':closeAll();caseSheet(id);break;
+    case'preSetup':closeAll();preSetup(id);break;
+    case'preStep':closeAll();preStepSheet(id,a.dataset.k);break;
     case'editTask':if(S.canWrite){closeAll();markSeen(S.tasks.get(id));taskForm(S.tasks.get(id))}break;
     case'assign':closeAll();assignSheet(id);break;
     case'take':await saveTask(id,{assignee:S.me?.name||'',seen:true});toast('המשימה אצלך');break;
@@ -1701,7 +1683,7 @@ async function init(){
   if(!saved){let last='';try{last=localStorage.getItem('lb.me')||''}catch(e){}
     if(last&&hasCode(last))codeGate(last,render);else showWho(false)}
   const sub=(col)=>S.db.collection(col).onSnapshot(snap=>{const m=new Map();snap.docs.forEach(d=>m.set(d.id,{id:d.id,...d.data()}));S[col]=m;S.loaded[col]=true;soon()},err=>{S.loaded[col]=true;if(err?.code!=='auth')toast('אין חיבור למחשב הראשי. בודק שוב…')});
-  sub('cases');sub('tasks');sub('deals');
+  sub('cases');sub('tasks');
   const nhc=async()=>{try{const n=(await api('GET','/api/c/inbox?lite=1')).filter(i=>i.status!=='done').length;if($('#nhCount'))$('#nhCount').textContent=n||''}catch(e){}};nhc();setInterval(nhc,60e3);
   setInterval(()=>{header();if(S.view==='today'||S.view==='cal')soon()},10*60e3);
 }

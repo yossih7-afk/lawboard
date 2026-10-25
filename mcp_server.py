@@ -34,6 +34,7 @@ INSTRUCTIONS = """אתה עוזר במשרד עורכי דין ישראלי, ו�
 - כשמזכירים תיק בשם או במספר, אתר אותו עם find_cases או get_case. אם יש כמה התאמות, שאל לאיזה התכוונו.
 - לניסוח טיוטה: קרא את החומר עם get_case_documents, נסח בעברית משפטית לפי תקסד"א התשע"ט-2018 והנוהג, אל תמציא עובדות או פסיקה, סמן חסרים ב-[להשלים: ...] ואסמכתאות לא ודאיות ב-[לאמת אסמכתא]. אחר כך הצע לשמור עם save_draft.
 - כל שינוי שאתה עושה נרשם ביומן התיק בשם "Claude".
+- "הליכים מקדמיים" (דיון מקדמי, גילוי מסמכים, עיון, שאלונים, דיווח, רשימת בקשות): השתמש ב-set_preliminary. כשמסמך בנט המשפט הוא תצהיר גילוי מסמכים, שאלון, מענה לשאלון או דיווח על דיון מקדמי, תייק אותו עם kind "הליכים מקדמיים" וסמן את השלב. החלטה שקובעת מועד אחר להליכים המקדמיים: court_due.
 - "סנכרון נט המשפט": המשתמש מחובר לנט המשפט בכרום עם הכרטיס החכם. עבור (עם Claude in Chrome) על ההחלטות והדיונים החדשים, ולכל מסמך חדש (החלטות, פסקי דין, פרוטוקולים, כתבי טענות, בקשות, תגובות, תצהירים): זהה את התיק לפי מספר ההליך, קרא את הטקסט המלא, ותייק עם add_case_document עם הסוג (kind) ומי הגיש (filed_by). מועדים הוסף רק מתוך החלטות ופסקי דין. דיונים מהיומן הוסף עם create_task (kind=hearing). בסוף הצג טבלת סיכום: תיק, מה תויק, אילו מועדים נוספו, ומה לא זוהה. אל תגיש ואל תשנה דבר בנט המשפט עצמו."""
 
 
@@ -484,11 +485,94 @@ def t_list_people(a):
     return {"people": p.get("list") or (get("settings", "main") or {}).get("people", [])}
 
 
+# ---------- preliminary procedures (same rules as the "הליכים מקדמיים" screen) ----------
+PRE = [("meet", "דיון מקדמי בין הצדדים", "last", 30), ("disc", "תצהיר גילוי מסמכים", "last", 30),
+       ("qSend", "שליחת שאלון לצד השני", "last", 30), ("qAns", "מענה בתצהיר לשאלון שקיבלנו", "qIn", 30),
+       ("insp", "עיון במסמכים", "discX", 30), ("report", "דיווח לבית המשפט על הדיון המקדמי", "pre", -20),
+       ("reqs", "רשימת בקשות (כולל בקשות בעניין הליכים מקדמיים)", "pre", -20)]
+
+
+def in_recess(s):
+    return s[5:7] == "08" or (s[5:7] == "07" and int(s[8:10]) >= 16)
+
+
+def pre_due(pre, key, base_key, days):
+    step = (pre.get("steps") or {}).get(key) or {}
+    if step.get("due"):
+        return step["due"]
+    base = pre.get(base_key) or ""
+    if base_key == "discX" and not base and ((pre.get("steps") or {}).get("disc") or {}).get("s") == "done":
+        base = pre["steps"]["disc"].get("d", "")
+    if not base:
+        return ""
+    d = base
+    if days > 0:
+        n = 0
+        while n < days:
+            d = add_days(d, 1)
+            if not in_recess(d):
+                n += 1
+        return roll_weekend(d)
+    d = add_days(d, days)
+    while datetime.strptime(d, "%Y-%m-%d").weekday() in (4, 5):
+        d = add_days(d, -1)
+    return d
+
+
+def pre_sync(c):
+    pre = c.get("pre") or {}
+    tasks = [t for t in rows("tasks") if t.get("caseId") == c["id"] and t.get("preStep")]
+    ids = dict(pre.get("tasks") or {})
+    out = []
+    for key, label, base_key, days in PRE:
+        st = ((pre.get("steps") or {}).get(key) or {}).get("s", "")
+        due = pre_due(pre, key, base_key, days)
+        t = next((t for t in tasks if t.get("preStep") == key), None)
+        if st in ("", "other") and due and not pre.get("off"):
+            if not t:
+                ids[key] = new_task({"caseId": c["id"], "preStep": key, "kind": "discovery", "title": label, "due": due,
+                          "assignee": c.get("owner", ""), "effort": 1, "source": "הליכים מקדמיים", "verify": False})
+            elif t.get("due") != due or t.get("done"):
+                patch("tasks", t["id"], {"due": due, "done": False, "updatedAt": now()})
+            out.append({"step": label, "due": due})
+        elif t and not t.get("done"):
+            patch("tasks", t["id"], {"done": True, "doneAt": today(), "updatedAt": now()})
+        if t:
+            ids[key] = t["id"]
+    patch("cases", c["id"], {"pre": {**pre, "tasks": ids}})
+    return out
+
+
+def t_set_preliminary(a):
+    c = find_case(a.get("case"))
+    pre = dict(c.get("pre") or {})
+    for arg, key in (("last_pleading", "last"), ("pretrial", "pre"), ("questionnaire_received", "qIn"), ("discovery_exchanged", "discX")):
+        if a.get(arg):
+            pre[key] = check_date(a[arg])
+    if "not_applicable" in a:
+        pre["off"] = bool(a["not_applicable"])
+        pre["offWhy"] = str(a.get("reason", "")) if pre["off"] else ""
+    if a.get("step"):
+        keys = {k: l for k, l, _, _ in PRE}
+        if a["step"] not in keys:
+            raise ValueError("שלב לא מוכר. אחד מ: " + ", ".join(keys))
+        state = {"done": "done", "na": "na", "other": "other", "todo": ""}[a.get("state", "done")]
+        steps = dict(pre.get("steps") or {})
+        old = steps.get(a["step"]) or {}
+        steps[a["step"]] = {**old, "s": state, "d": check_date(a["date"]) if a.get("date") else (today() if state == "done" else ""),
+                            "due": check_date(a["court_due"]) if a.get("court_due") else old.get("due", ""),
+                            "note": str(a.get("note", old.get("note", "")))}
+        pre["steps"] = steps
+        log_to("cases", c["id"], f"הליכים מקדמיים: {keys[a['step']]} — " + {"done": "בוצע", "na": "לא נדרש", "other": "אחר", "": "טרם"}[state])
+    patch("cases", c["id"], {"pre": pre, "updatedAt": now()})
+    open_steps = pre_sync({**c, "pre": pre})
+    return {"ok": True, "case": c.get("client"), "open_steps": open_steps, "not_applicable": bool(pre.get("off"))}
+
+
 S_CASE = {"type": "string", "description": "שם הלקוח, מספר הליך (למשל 12345-01-26) או מספר תיק משרד"}
-S_DEAL = {"type": "string", "description": "שם העסקה, גוש/חלקה או מספר תיק משרד"}
 S_DATE = {"type": "string", "description": "YYYY-MM-DD"}
 TOOLS = [
-    ("overview", "מה דחוף: משימות באיחור, להיום ול-7 הימים הקרובים, תיקים בלי מועד, עסקאות פעילות.", t_overview,
+    ("overview", "מה דחוף: משימות באיחור, להיום ול-7 הימים הקרובים, תיקים בלי מועד.", t_overview,
      {"assignee": {"type": "string", "description": "רק המשימות של עובד מסוים (לא חובה)"}}, []),
     ("find_cases", "חיפוש תיקי בית משפט (פתוחים כברירת מחדל) עם סטטוס אחרון ופעולה לביצוע.", t_find_cases,
      {"query": {"type": "string"}, "status": {"type": "string", "enum": ["open", "closed", "all"]}, "owner": {"type": "string"}}, []),
@@ -507,29 +591,24 @@ TOOLS = [
     ("reopen_case", "פתיחה מחדש של תיק סגור.", t_reopen_case, {"case": S_CASE}, ["case"]),
     ("list_tasks", "רשימת משימות לפי טווח: late, today, week, month, open, unassigned, done.", t_list_tasks,
      {"scope": {"type": "string", "enum": ["late", "today", "week", "month", "open", "unassigned", "done"]}, "assignee": {"type": "string"}}, []),
-    ("create_task", "יצירת משימה או מועד בתיק (case) או בעסקה (deal).", t_create_task,
-     {"case": S_CASE, "deal": S_DEAL, "title": {"type": "string"}, "kind": {"type": "string", "enum": list(KINDS)},
+    ("create_task", "יצירת משימה או מועד בתיק.", t_create_task,
+     {"case": S_CASE, "title": {"type": "string"}, "kind": {"type": "string", "enum": list(KINDS)},
       "due": S_DATE, "time": {"type": "string", "description": "HH:MM, לדיונים"}, "assignee": {"type": "string"},
       "note": {"type": "string"}, "effort": {"type": "integer", "description": "ימי עבודה לפני המועד"}}, ["due"]),
     ("update_task", "עדכון משימה: done=true לסימון כבוצע, due, assignee (העברה לעובד), title, note, time.", t_update_task,
      {"task_id": {"type": "string"}, "done": {"type": "boolean"}, "due": S_DATE, "assignee": {"type": "string"},
       "title": {"type": "string"}, "note": {"type": "string"}, "time": {"type": "string"}}, ["task_id"]),
-    ("find_deals", "חיפוש עסקאות מקרקעין עם התקדמות והשלב הבא.", t_find_deals,
-     {"query": {"type": "string"}, "status": {"type": "string", "enum": ["active", "done", "all"]}}, []),
-    ("get_deal", "כל הפרטים על עסקה: שלבים, יומן, משימות.", t_get_deal, {"deal": S_DEAL}, ["deal"]),
-    ("set_deal_stage", "סימון שלב בעסקה: done / na (לא רלוונטי) / todo. חתימה פותחת משימת דיווח למיסוי ל-30 יום.", t_set_deal_stage,
-     {"deal": S_DEAL, "stage": {"type": "string", "description": "אחד מ: " + ", ".join(f"{k}={v}" for k, v in STAGES.items())},
-      "state": {"type": "string", "enum": ["done", "na", "todo"]}, "date": S_DATE}, ["deal", "stage"]),
-    ("add_deal_update", "עדכון ביומן העסקה, ואופציונלית 'פעולה לביצוע'.", t_add_deal_update,
-     {"deal": S_DEAL, "text": {"type": "string"}, "action": {"type": "string"}}, ["deal", "text"]),
-    ("create_deal", "פתיחת עסקת מקרקעין חדשה.", t_create_deal,
-     {"name": {"type": "string"}, "fileNo": {"type": "string"}, "type": {"type": "string"}, "property": {"type": "string"},
-      "ourSide": {"type": "string"}, "otherLawyer": {"type": "string"}, "contact": {"type": "string"}, "owner": {"type": "string"},
-      "price": {"type": "string"}, "action": {"type": "string"}, "notes": {"type": "string"}}, ["name"]),
-    ("get_case_documents", "הטקסט של מסמכי התיק או העסקה (החלטות, כתבי טענות), דוגמאות לסגנון המשרד ופרטי החתימה — לניסוח טיוטות.", t_get_case_documents,
-     {"case": S_CASE, "deal": S_DEAL, "max_chars": {"type": "integer"}}, []),
-    ("save_draft", "שמירת טיוטה בתיק או בעסקה, כדי שתופיע במערכת.", t_save_draft,
-     {"case": S_CASE, "deal": S_DEAL, "doc_type": {"type": "string"}, "text": {"type": "string"}, "task_id": {"type": "string"}}, ["text"]),
+    ("set_preliminary", "הליכים מקדמיים בתיק (תקסד\"א התשע\"ט-2018): קביעת מועד כתב הטענות האחרון וקדם המשפט, סימון שלב כבוצע / לא נדרש, "
+     "מועד שנקבע בהחלטה, או סימון שההליכים לא חלים בתיק. משימות המועדים נפתחות ומתעדכנות לבד. שלבים: "
+     + ", ".join(f"{k}={l}" for k, l, _, _ in PRE), t_set_preliminary,
+     {"case": S_CASE, "last_pleading": S_DATE, "pretrial": S_DATE, "questionnaire_received": S_DATE, "discovery_exchanged": S_DATE,
+      "not_applicable": {"type": "boolean"}, "reason": {"type": "string"},
+      "step": {"type": "string", "enum": [k for k, _, _, _ in PRE]}, "state": {"type": "string", "enum": ["done", "na", "other", "todo"]},
+      "date": S_DATE, "court_due": S_DATE, "note": {"type": "string"}}, ["case"]),
+    ("get_case_documents", "הטקסט של מסמכי התיק (החלטות, כתבי טענות), דוגמאות לסגנון המשרד ופרטי החתימה — לניסוח טיוטות.", t_get_case_documents,
+     {"case": S_CASE, "max_chars": {"type": "integer"}}, ["case"]),
+    ("save_draft", "שמירת טיוטה בתיק, כדי שתופיע במערכת.", t_save_draft,
+     {"case": S_CASE, "doc_type": {"type": "string"}, "text": {"type": "string"}, "task_id": {"type": "string"}}, ["text"]),
     ("add_case_document", "תיוק מסמך מנט המשפט בתיק (החלטה, פסק דין, פרוטוקול, כתב טענות, בקשה, תגובה, תצהיר): הטקסט המלא נשמר במסמכי התיק, ומועדים שבהחלטה נוספים כמשימות מסומנות 'לאמת'. "
      "חשב מועדים: 'תוך X ימים' = X ימים קלנדריים מיום ההחלטה, בלי ימי פגרת קיץ (16.7–31.8), ומועד שנופל בשישי/שבת עובר לראשון. מסמך שכבר תויק לא ישוכפל.", t_add_case_document,
      {"case": S_CASE, "name": {"type": "string", "description": "למשל: החלטה מיום 20.10.2026"}, "kind": {"type": "string", "enum": ["החלטה", "פסק דין", "פרוטוקול", "כתב תביעה", "כתב הגנה", "כתב תשובה", "בקשה", "תגובה", "תשובה לתגובה", "תצהיר", "חוות דעת", "הודעה", "זימון לדיון", "אחר"]},
